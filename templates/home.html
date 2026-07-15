@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movies World - Premium Movie & Series Suggestion System</title>
+    <!-- CSS stylesheet paths match Flask static endpoints -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Background glow elements for rich dark aesthetic -->
+    <div class="glow-bg-1"></div>
+    <div class="glow-bg-2"></div>
+
+    <!-- Header Navigation -->
+    <header class="header">
+        <div class="container nav-container">
+            <div class="logo" onclick="resetFilters()">
+                <i class="fas fa-play-circle animate-pulse"></i>
+                <h1>Movies World</h1>
+            </div>
+            
+            <!-- Search bar & filters toggle -->
+            <div class="search-and-type">
+                <!-- Media Type Switcher -->
+                <div class="media-toggle-container">
+                    <button class="toggle-btn active" id="btnMovie" onclick="setMediaType('movie')">
+                        <i class="fas fa-film"></i> Movies
+                    </button>
+                    <button class="toggle-btn" id="btnTV" onclick="setMediaType('tv')">
+                        <i class="fas fa-tv"></i> Series
+                    </button>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search title...">
+                    <button id="searchBtn"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container main-layout">
+        
+        <!-- Filters Sidebar (Glassmorphic) -->
+        <aside class="sidebar-filters">
+            <div class="filter-section">
+                <h3><i class="fas fa-sliders-h"></i> Find Your Vibe</h3>
+                <p class="filter-subtitle">Suggest based on your genre</p>
+                <div class="genre-grid">
+                    <button class="genre-card" id="genre-adventure" onclick="toggleGenre(12, 'adventure')">
+                        <div class="icon-wrap"><i class="fas fa-compass"></i></div>
+                        <span>Adventure</span>
+                    </button>
+                    <button class="genre-card" id="genre-horror" onclick="toggleGenre(27, 'horror')">
+                        <div class="icon-wrap"><i class="fas fa-ghost"></i></div>
+                        <span>Horror</span>
+                    </button>
+                    <button class="genre-card" id="genre-thriller" onclick="toggleGenre(53, 'thriller')">
+                        <div class="icon-wrap"><i class="fas fa-mask"></i></div>
+                        <span>Thriller</span>
+                    </button>
+                    <button class="genre-card" id="genre-drama" onclick="toggleGenre(18, 'drama')">
+                        <div class="icon-wrap"><i class="fas fa-theater-masks"></i></div>
+                        <span>Drama</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Year range sliders (1991 to latest) -->
+            <div class="filter-section">
+                <h3><i class="fas fa-calendar-alt"></i> Release Range</h3>
+                <p class="filter-subtitle">Filter from 1991 to latest</p>
+                <div class="year-selector">
+                    <div class="year-val-labels">
+                        <span id="lblMinYear">1991</span>
+                        <span>-</span>
+                        <span id="lblMaxYear">2026</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="minYearSlider" min="1991" max="2026" value="1991" class="slider-bar" oninput="updateYearFilter()">
+                        <input type="range" id="maxYearSlider" min="1991" max="2026" value="2026" class="slider-bar" oninput="updateYearFilter()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Curated collections side-bar links -->
+            <div class="filter-section">
+                <h3><i class="fas fa-heart"></i> Curated Lists</h3>
+                <div class="collection-list">
+                    <button class="col-item-btn" onclick="loadCuratedList('korean')">
+                        <i class="fas fa-globe-asia"></i> Korean Stars
+                    </button>
+                    <button class="col-item-btn" onclick="loadCuratedList('spanish')">
+                        <i class="fas fa-flag"></i> Spanish Hits
+                    </button>
+                    <button class="col-item-btn" onclick="loadCuratedList('chinese')">
+                        <i class="fas fa-yin-yang"></i> Chinese Epics
+                    </button>
+                </div>
+            </div>
+            
+            <button class="btn btn-reset" onclick="resetFilters()">
+                <i class="fas fa-redo"></i> Reset Filters
+            </button>
+        </aside>
+
+        <!-- Main Show Catalog -->
+        <main class="catalog-content">
+            <div class="catalog-header">
+                <h2 id="catalogTitle">Trending Right Now</h2>
+                <div class="category-quick-filters">
+                    <button class="q-btn active" id="qPopular" onclick="loadQuickCategory('popular')">Popular</button>
+                    <button class="q-btn" id="qTopRated" onclick="loadQuickCategory('top_rated')">Top Rated</button>
+                    <button class="btn btn-surprise" onclick="surpriseMe()">
+                        <i class="fas fa-random"></i> Surprise Me!
+                    </button>
+                </div>
+            </div>
+
+            <div id="moviesGrid" class="movies-grid">
+                <!-- Data loaded dynamically -->
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Fetching curated suggestion list...</p>
+                </div>
+            </div>
+            
+            <!-- Pagination Controls -->
+            <div class="pagination" id="paginationControls">
+                <button class="page-nav" onclick="changePage(-1)"><i class="fas fa-chevron-left"></i> Previous</button>
+                <span class="page-num" id="pageNumberDisplay">Page 1</span>
+                <button class="page-nav" onclick="changePage(1)">Next <i class="fas fa-chevron-right"></i></button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Media Detail Modal -->
+    <div id="movieModal" class="modal">
+        <div class="modal-content-wrapper">
+            <span class="close-btn" onclick="closeModal()"><i class="fas fa-times"></i></span>
+            <div id="movieDetails"></div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container text-center">
+            <p>&copy; 2026 ShowSeeker. Precision movie & series recommendation using TMDb API.</p>
+            <p class="small-attrib">Designed in compliance with HTML5 and core Python backend libraries.</p>
+        </div>
+    </footer>
+
+    <!-- JS script paths match Flask static endpoints -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
