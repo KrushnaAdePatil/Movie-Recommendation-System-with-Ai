@@ -20,6 +20,20 @@ def test_endpoint(path, name):
     except Exception as e:
         print(f"[{name}] GET {path} - FAILED with exception: {e}")
 
+def test_post_endpoint(path, name, payload):
+    url = f"{BASE_URL}{path}"
+    try:
+        response = requests.post(url, json=payload, timeout=15)
+        print(f"[{name}] POST {path} - Status: {response.status_code}")
+        if response.status_code == 200:
+            print("  -> Success!")
+            data = response.json()
+            print(f"  -> Reply snippet: {data.get('response', '')[:100]}...")
+        else:
+            print(f"  -> Error details: {response.text[:200]}")
+    except Exception as e:
+        print(f"[{name}] POST {path} - FAILED with exception: {e}")
+
 if __name__ == "__main__":
     print("Starting API Endpoints Verification...")
     test_endpoint("/", "Homepage")
@@ -29,3 +43,6 @@ if __name__ == "__main__":
     test_endpoint("/api/movie/475557", "Movie Details (Joker)")
     test_endpoint("/api/movie/genres", "Get Genres list")
     test_endpoint("/api/curated/korean", "Curated Korean collection")
+    test_endpoint("/api/discover/mood?mood=adrenaline", "Mood Discovery (Adrenaline)")
+    test_post_endpoint("/api/chat", "Chatbot Query", {"message": "Suggest a good comedy movie from 2020", "history": []})
+

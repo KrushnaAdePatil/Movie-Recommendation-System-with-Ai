@@ -14,6 +14,17 @@
     <div class="glow-bg-1"></div>
     <div class="glow-bg-2"></div>
 
+    <!-- Shared Watchlist Banner -->
+    <div id="sharedPlaylistBanner" class="shared-banner" style="display: none;">
+        <div class="banner-content">
+            <span><i class="fas fa-link"></i> Viewing shared watch list from a friend!</span>
+            <div class="banner-actions">
+                <button class="banner-btn primary" onclick="importSharedList()"><i class="fas fa-download"></i> Merge to Drawer</button>
+                <button class="banner-btn secondary" onclick="closeSharedBanner()"><i class="fas fa-times"></i> Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Header Navigation -->
     <header class="header">
         <div class="container nav-container">
@@ -35,9 +46,21 @@
                 </div>
 
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="Search title...">
+                    <input type="text" id="searchInput" placeholder="Search title..." autocomplete="off">
                     <button id="searchBtn"><i class="fas fa-search"></i></button>
+                    <!-- Suggestions Popover Box -->
+                    <div id="suggestionsBox" class="suggestions-box"></div>
                 </div>
+
+                <!-- AI Quick Matcher Button -->
+                <button id="quickMatcherToggleBtn" class="matcher-nav-btn" onclick="toggleQuickMatcher()">
+                    <i class="fas fa-gamepad"></i> Taste Matcher
+                </button>
+
+                <!-- Watchlist & Favorites Toggle Button -->
+                <button id="watchlistToggleBtn" class="watchlist-nav-btn" onclick="toggleWatchlistDrawer()">
+                    <i class="fas fa-bookmark"></i> Watchlist (<span id="watchlistCount">0</span>)
+                </button>
             </div>
         </div>
     </header>
@@ -66,6 +89,34 @@
                     <button class="genre-card" id="genre-drama" onclick="toggleGenre(18, 'drama')">
                         <div class="icon-wrap"><i class="fas fa-theater-masks"></i></div>
                         <span>Drama</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mood Discovery Filter Section -->
+            <div class="filter-section">
+                <h3><i class="fas fa-laugh-beam"></i> Pick a Mood</h3>
+                <p class="filter-subtitle">Suggest titles matching your vibe</p>
+                <div class="mood-grid">
+                    <button class="mood-card" id="mood-adrenaline" onclick="discoverByMood('adrenaline')">
+                        <span class="mood-emoji">🔥</span>
+                        <span>Adrenaline</span>
+                    </button>
+                    <button class="mood-card" id="mood-cozy" onclick="discoverByMood('cozy')">
+                        <span class="mood-emoji">🛋️</span>
+                        <span>Cozy</span>
+                    </button>
+                    <button class="mood-card" id="mood-spooky" onclick="discoverByMood('spooky')">
+                        <span class="mood-emoji">👻</span>
+                        <span>Spooky</span>
+                    </button>
+                    <button class="mood-card" id="mood-mindbending" onclick="discoverByMood('mindbending')">
+                        <span class="mood-emoji">🧠</span>
+                        <span>Mind-Bend</span>
+                    </button>
+                    <button class="mood-card" id="mood-emotional" onclick="discoverByMood('emotional')">
+                        <span class="mood-emoji">😭</span>
+                        <span>Emotional</span>
                     </button>
                 </div>
             </div>
@@ -99,6 +150,38 @@
                     </button>
                     <button class="col-item-btn" onclick="loadCuratedList('chinese')">
                         <i class="fas fa-yin-yang"></i> Chinese Epics
+                    </button>
+                </div>
+            </div>
+
+            <!-- Streaming Services Filter -->
+            <div class="filter-section">
+                <h3><i class="fas fa-play-circle"></i> Streaming On</h3>
+                <p class="filter-subtitle">Select provider (India)</p>
+                <div class="provider-grid">
+                    <button class="provider-card" id="prov-netflix" onclick="toggleProvider(8, 'netflix')">
+                        <img src="https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.png" alt="Netflix">
+                        <span>Netflix</span>
+                    </button>
+                    <button class="provider-card" id="prov-prime" onclick="toggleProvider(119, 'prime')">
+                        <img src="https://image.tmdb.org/t/p/w200/68MNrwlkpF7WnmNPXLah69CR5cb.jpg" alt="Prime Video">
+                        <span>Prime</span>
+                    </button>
+                    <button class="provider-card" id="prov-hotstar" onclick="toggleProvider(122, 'hotstar')">
+                        <img src="https://image.tmdb.org/t/p/w200/97yvRBw1GzX7fXprcF80er19ot.jpg" alt="Hotstar">
+                        <span>Hotstar</span>
+                    </button>
+                    <button class="provider-card" id="prov-jiocinema" onclick="toggleProvider(220, 'jiocinema')">
+                        <img src="https://image.tmdb.org/t/p/w200/yXrkdA9NlUfX2mRDhPgk0ye9frq.png" alt="JioCinema">
+                        <span>JioCinema</span>
+                    </button>
+                    <button class="provider-card" id="prov-sonyliv" onclick="toggleProvider(237, 'sonyliv')">
+                        <img src="https://image.tmdb.org/t/p/w200/8FhUdXfYC3E2EfntzwCdHYvo4vt.png" alt="SonyLIV">
+                        <span>SonyLIV</span>
+                    </button>
+                    <button class="provider-card" id="prov-zee5" onclick="toggleProvider(232, 'zee5')">
+                        <img src="https://image.tmdb.org/t/p/w200/cakduIXxOWnOasbKSMZ6Xvw5REG.png" alt="ZEE5">
+                        <span>ZEE5</span>
                     </button>
                 </div>
             </div>
@@ -140,9 +223,59 @@
 
     <!-- Media Detail Modal -->
     <div id="movieModal" class="modal">
+        <!-- Dynamic Ambient Backing Glow -->
+        <div class="modal-ambient-glow"></div>
+        
         <div class="modal-content-wrapper">
             <span class="close-btn" onclick="closeModal()"><i class="fas fa-times"></i></span>
             <div id="movieDetails"></div>
+        </div>
+    </div>
+
+    <!-- Watchlist Slide-out Drawer (Glassmorphic) -->
+    <div id="watchlistDrawer" class="watchlist-drawer">
+        <div class="drawer-header">
+            <h3><i class="fas fa-bookmark"></i> Shelf Collections</h3>
+            <button class="drawer-close-btn" onclick="toggleWatchlistDrawer()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="drawer-tabs">
+            <button id="tabWatchlist" class="drawer-tab active" onclick="switchDrawerTab('watchlist')">Watchlist</button>
+            <button id="tabFavorites" class="drawer-tab" onclick="switchDrawerTab('favorites')">Favorites</button>
+        </div>
+        <div id="drawerItems" class="drawer-items">
+            <!-- Dynamically populated -->
+        </div>
+        <!-- Drawer Footer Share Actions -->
+        <div class="drawer-footer-share">
+            <button class="btn btn-share-link" onclick="shareWatchlist('watchlist')">
+                <i class="fas fa-share-alt"></i> Share Watchlist
+            </button>
+            <button class="btn btn-share-link" onclick="shareWatchlist('favorites')">
+                <i class="fas fa-heart"></i> Share Favorites
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom High-Tech Video Player Modal (for YouTube trailers) -->
+    <div id="customPlayerModal" class="custom-video-modal">
+        <div class="custom-video-wrapper">
+            <span class="custom-player-close" onclick="closeCustomPlayer()"><i class="fas fa-times"></i></span>
+            <div class="video-container">
+                <div id="customYoutubePlayer"></div>
+            </div>
+            <!-- Custom HTML5 play bar overlay -->
+            <div class="custom-player-controls">
+                <button id="customPlayBtn" class="control-btn" onclick="toggleCustomPlay()"><i class="fas fa-play"></i></button>
+                <div class="custom-progress-container" onclick="seekCustomPlayer(event)">
+                    <div id="customProgressBar" class="custom-progress-bar"></div>
+                </div>
+                <span id="customTimeText" class="custom-time-text">00:00 / 00:00</span>
+                <div class="custom-volume-container">
+                    <button id="customMuteBtn" class="control-btn" onclick="toggleCustomMute()"><i class="fas fa-volume-up"></i></button>
+                    <input type="range" id="customVolumeSlider" min="0" max="100" value="100" class="vol-slider" oninput="changeCustomVolume(this.value)">
+                </div>
+                <button id="customFullscreenBtn" class="control-btn" onclick="toggleCustomFullscreen()"><i class="fas fa-expand"></i></button>
+            </div>
         </div>
     </div>
 
@@ -154,7 +287,78 @@
         </div>
     </footer>
 
-    <!-- JS script paths match Flask static endpoints -->
+    <!-- Chatbot Widget -->
+    <div class="chatbot-container">
+        <!-- Floating Trigger Button -->
+        <button class="chatbot-trigger" id="chatbotTrigger" onclick="toggleChatbot()" title="Chat with MovieBot!">
+            <i class="fas fa-robot animate-pulse"></i>
+            <span class="pulse-ring"></span>
+        </button>
+
+        <!-- Chat Window Panel -->
+        <div class="chatbot-window" id="chatbotWindow">
+            <div class="chatbot-header">
+                <div class="bot-info">
+                    <div class="bot-avatar">
+                         <i class="fas fa-robot"></i>
+                         <span class="online-indicator"></span>
+                    </div>
+                    <div>
+                        <h4>MovieBot 🍿</h4>
+                        <span class="bot-status">Online helper</span>
+                    </div>
+                </div>
+                <button class="chat-close-btn" onclick="toggleChatbot()"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="chatbot-messages" id="chatbotMessages">
+                <!-- Messages will be injected dynamically -->
+            </div>
+            
+            <div class="chatbot-input-area">
+                <input type="text" id="chatbotInput" placeholder="Ask about movies or series..." onkeydown="handleChatbotKey(event)">
+                <button id="chatbotSendBtn" onclick="sendChatbotMessage()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tinder Matcher Quiz Overlay Container -->
+    <div id="matcherOverlay" class="matcher-overlay" style="display: none;">
+        <div class="matcher-card-wrapper">
+            <span class="matcher-close-btn" onclick="toggleQuickMatcher()"><i class="fas fa-times"></i></span>
+            <div class="matcher-header">
+                <h3><i class="fas fa-fire"></i> Taste Matcher</h3>
+                <p>Swipe or click to build your AI profile! (<span id="matcherDeckCount">0</span> left)</p>
+            </div>
+            
+            <div id="matcherDeck" class="matcher-deck">
+                <!-- Swiper cards will be dynamically loaded here -->
+                <div class="matcher-deck-empty">
+                    <i class="fas fa-check-circle"></i>
+                    <h4>Deck Complete!</h4>
+                    <p>Let Gemini analyze your swiped titles and match you with recommendations.</p>
+                    <button class="btn btn-generate-rec" onclick="getQuizRecommendations()">
+                        <i class="fas fa-sparkles"></i> Generate AI Picks
+                    </button>
+                </div>
+            </div>
+            
+            <div id="matcherControls" class="matcher-controls">
+                <button class="matcher-action-btn dislike" onclick="swipeMatcherCard('dislike')">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button class="matcher-action-btn skip" onclick="swipeMatcherCard('skip')">
+                    <i class="fas fa-forward"></i>
+                </button>
+                <button class="matcher-action-btn like" onclick="swipeMatcherCard('like')">
+                    <i class="fas fa-heart"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Youtube Iframe API script and Main JS script -->
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
