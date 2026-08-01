@@ -360,6 +360,16 @@ async function loadContent() {
         const response = await fetch(url);
         const data = await response.json();
 
+        if (!response.ok) {
+            const errorMsg = data.error || 'Server error. Please try again later.';
+            grid.innerHTML = `
+                <div class="loading">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; color: #ff5252;"></i>
+                    <p style="margin-top: 15px; color: #ff5252; text-align: center; font-weight: 500;">${errorMsg}</p>
+                </div>`;
+            return;
+        }
+
         if (data.results && data.results.length > 0) {
             renderCards(data.results);
 
@@ -383,7 +393,7 @@ async function loadContent() {
         }
     } catch (error) {
         console.error('Error fetching list:', error);
-        grid.innerHTML = '<p class="error-text" style="color: #ff5252; text-align: center; grid-column: 1/-1;">Connection lost with TMDB server. Retrying...</p>';
+        grid.innerHTML = '<p class="error-text" style="color: #ff5252; text-align: center; grid-column: 1/-1;">Connection lost with server. Please try again later.</p>';
     }
 }
 
@@ -461,24 +471,73 @@ async function showDetailsModal(id, mType) {
         // Watch Providers
         let providersHtml = '';
         if (item.watch_providers && item.watch_providers.length > 0) {
+            const region = item.watch_providers[0].region || 'IN';
+            const regionLabel = ` (${region})`;
+
+            const flatrate = item.watch_providers.filter(p => p.type === 'flatrate');
+            const freeAds = item.watch_providers.filter(p => p.type === 'free' || p.type === 'ads');
+            const rentBuy = item.watch_providers.filter(p => p.type === 'rent' || p.type === 'buy');
+
+            let sectionsHtml = '';
+            if (flatrate.length > 0) {
+                sectionsHtml += `
+                    <div class="provider-category">
+                        <h5><i class="fas fa-tv"></i> Stream / Subscription</h5>
+                        <div class="providers-grid">
+                            ${flatrate.map(p => `
+                                <div class="provider-badge" title="${p.provider_name}">
+                                    <img src="${p.logo_url}" alt="${p.provider_name}">
+                                    <span>${p.provider_name}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            if (freeAds.length > 0) {
+                sectionsHtml += `
+                    <div class="provider-category">
+                        <h5><i class="fas fa-gift"></i> Free / Ads</h5>
+                        <div class="providers-grid">
+                            ${freeAds.map(p => `
+                                <div class="provider-badge" title="${p.provider_name}">
+                                    <img src="${p.logo_url}" alt="${p.provider_name}">
+                                    <span>${p.provider_name}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            if (rentBuy.length > 0) {
+                sectionsHtml += `
+                    <div class="provider-category">
+                        <h5><i class="fas fa-shopping-bag"></i> Rent / Buy</h5>
+                        <div class="providers-grid">
+                            ${rentBuy.map(p => `
+                                <div class="provider-badge" title="${p.provider_name}">
+                                    <img src="${p.logo_url}" alt="${p.provider_name}">
+                                    <span>${p.provider_name}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
             providersHtml = `
                 <div class="watch-providers-box">
-                    <h4><i class="fas fa-play"></i> Streaming On</h4>
-                    <div class="providers-grid">
-                        ${item.watch_providers.map(p => `
-                            <div class="provider-badge" title="${p.provider_name} (${p.region})">
-                                <img src="${p.logo_url}" alt="${p.provider_name}">
-                                <span>${p.provider_name}</span>
-                            </div>
-                        `).join('')}
+                    <h4><i class="fas fa-play"></i> Where to Watch${regionLabel}</h4>
+                    <div class="providers-container">
+                        ${sectionsHtml}
                     </div>
                 </div>
             `;
         } else {
             providersHtml = `
                 <div class="watch-providers-box">
-                    <h4><i class="fas fa-exclamation-circle" style="color: var(--text-muted);"></i> Streaming</h4>
-                    <p style="font-size: 0.85rem; color: var(--text-muted);">Only available for purchase/rent or not streaming currently.</p>
+                    <h4><i class="fas fa-exclamation-circle" style="color: var(--text-muted);"></i> Where to Watch</h4>
+                    <p style="font-size: 0.85rem; color: var(--text-muted);">Not available for streaming, rent, or buy currently in supported regions.</p>
                 </div>
             `;
         }

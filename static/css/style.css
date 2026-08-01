@@ -813,6 +813,35 @@ body {
     border-radius: 5px;
 }
 
+.providers-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.provider-category {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-category h5 {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.provider-category h5 i {
+    font-size: 0.85rem;
+    color: var(--primary);
+}
+
 /* Trailer section */
 .modal-multimedia {
     padding: 0 40px 40px 40px;

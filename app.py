@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify, request
 import requests
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
@@ -22,6 +23,95 @@ CURATED_MOVIES = {
     "spanish": [
         {"id": 1417, "type": "movie"},   # Pan's Labyrinth
         {"id": 71446, "type": "tv"},     # Money Heist
+    ]
+}
+
+# Local cache of high-quality movie & TV series suggestions for standard moods to bypass Gemini rate limits
+MOOD_CACHE = {
+    "adrenaline": [
+        {"title": "Mad Max: Fury Road", "type": "movie"},
+        {"title": "John Wick: Chapter 4", "type": "movie"},
+        {"title": "Die Hard", "type": "movie"},
+        {"title": "Speed", "type": "movie"},
+        {"title": "Top Gun: Maverick", "type": "movie"},
+        {"title": "The Dark Knight", "type": "movie"},
+        {"title": "Gladiator", "type": "movie"},
+        {"title": "Inception", "type": "movie"},
+        {"title": "Breaking Bad", "type": "tv"},
+        {"title": "Money Heist", "type": "tv"},
+        {"title": "Squid Game", "type": "tv"},
+        {"title": "Prison Break", "type": "tv"},
+        {"title": "Reacher", "type": "tv"},
+        {"title": "The Boys", "type": "tv"},
+        {"title": "Fast X", "type": "movie"}
+    ],
+    "cozy": [
+        {"title": "Paddington 2", "type": "movie"},
+        {"title": "Amélie", "type": "movie"},
+        {"title": "Chef", "type": "movie"},
+        {"title": "Spirited Away", "type": "movie"},
+        {"title": "My Neighbor Totoro", "type": "movie"},
+        {"title": "Fantastic Mr. Fox", "type": "movie"},
+        {"title": "The Grand Budapest Hotel", "type": "movie"},
+        {"title": "Little Women", "type": "movie"},
+        {"title": "Midnight in Paris", "type": "movie"},
+        {"title": "Gilmore Girls", "type": "tv"},
+        {"title": "Ted Lasso", "type": "tv"},
+        {"title": "Heartstopper", "type": "tv"},
+        {"title": "Modern Family", "type": "tv"},
+        {"title": "The Good Place", "type": "tv"},
+        {"title": "Schitt's Creek", "type": "tv"}
+    ],
+    "spooky": [
+        {"title": "The Conjuring", "type": "movie"},
+        {"title": "Hereditary", "type": "movie"},
+        {"title": "A Nightmare on Elm Street", "type": "movie"},
+        {"title": "Halloween", "type": "movie"},
+        {"title": "The Shining", "type": "movie"},
+        {"title": "It", "type": "movie"},
+        {"title": "Get Out", "type": "movie"},
+        {"title": "Psycho", "type": "movie"},
+        {"title": "Stranger Things", "type": "tv"},
+        {"title": "The Haunting of Hill House", "type": "tv"},
+        {"title": "Wednesday", "type": "tv"},
+        {"title": "American Horror Story", "type": "tv"},
+        {"title": "Supernatural", "type": "tv"},
+        {"title": "Penny Dreadful", "type": "tv"},
+        {"title": "Alien", "type": "movie"}
+    ],
+    "mindbending": [
+        {"title": "Inception", "type": "movie"},
+        {"title": "Interstellar", "type": "movie"},
+        {"title": "Shutter Island", "type": "movie"},
+        {"title": "Memento", "type": "movie"},
+        {"title": "Donnie Darko", "type": "movie"},
+        {"title": "Arrival", "type": "movie"},
+        {"title": "The Matrix", "type": "movie"},
+        {"title": "Dark", "type": "tv"},
+        {"title": "Westworld", "type": "tv"},
+        {"title": "Severance", "type": "tv"},
+        {"title": "Black Mirror", "type": "tv"},
+        {"title": "Mr. Robot", "type": "tv"},
+        {"title": "Eternal Sunshine of the Spotless Mind", "type": "movie"},
+        {"title": "Fight Club", "type": "movie"},
+        {"title": "Tenet", "type": "movie"}
+    ],
+    "emotional": [
+        {"title": "The Pursuit of Happyness", "type": "movie"},
+        {"title": "Titanic", "type": "movie"},
+        {"title": "Schindler's List", "type": "movie"},
+        {"title": "Interstellar", "type": "movie"},
+        {"title": "The Fault in Our Stars", "type": "movie"},
+        {"title": "Inside Out", "type": "movie"},
+        {"title": "Marley & Me", "type": "movie"},
+        {"title": "A Star Is Born", "type": "movie"},
+        {"title": "This Is Us", "type": "tv"},
+        {"title": "Normal People", "type": "tv"},
+        {"title": "Fleabag", "type": "tv"},
+        {"title": "Anne with an E", "type": "tv"},
+        {"title": "BoJack Horseman", "type": "tv"},
+        {"title": "Eternal Sunshine of the Spotless Mind", "type": "movie"},
+        {"title": "Manchester by the Sea", "type": "movie"}
     ]
 }
 
@@ -193,38 +283,42 @@ def get_media_details(media_type, media_id):
         
         if prov_resp.status_code == 200:
             prov_data = prov_resp.json().get('results', {})
-            # Check regions for providers
-            for country in ['US', 'IN', 'GB', 'CA']:
-                region_data = prov_data.get(country, {})
-                flatrate = region_data.get('flatrate', [])
-                if flatrate:
-                    for p in flatrate:
+            # Check regions for providers, prioritizing India (IN)
+            target_country = None
+            region_data = {}
+            for country in ['IN', 'US', 'GB', 'CA']:
+                c_data = prov_data.get(country, {})
+                if any(c_data.get(k) for k in ['flatrate', 'free', 'ads', 'rent', 'buy']):
+                    target_country = country
+                    region_data = c_data
+                    break
+            
+            # Fallback to any region if no target region has providers
+            if not target_country and prov_data:
+                for country, c_data in prov_data.items():
+                    if any(c_data.get(k) for k in ['flatrate', 'free', 'ads', 'rent', 'buy']):
+                        target_country = country
+                        region_data = c_data
+                        break
+            
+            if target_country:
+                for p_type in ['flatrate', 'free', 'ads', 'rent', 'buy']:
+                    providers_list = region_data.get(p_type, [])
+                    for p in providers_list:
                         watch_providers.append({
                             'provider_name': p.get('provider_name'),
                             'logo_url': f"https://image.tmdb.org/t/p/w200{p.get('logo_path')}" if p.get('logo_path') else None,
-                            'region': country
+                            'type': p_type,
+                            'region': target_country
                         })
-                    break
-            
-            # Fallback to any region if target lists empty
-            if not watch_providers:
-                for country, r_data in prov_data.items():
-                    flatrate = r_data.get('flatrate', [])
-                    if flatrate:
-                        for p in flatrate:
-                            watch_providers.append({
-                                'provider_name': p.get('provider_name'),
-                                'logo_url': f"https://image.tmdb.org/t/p/w200{p.get('logo_path')}" if p.get('logo_path') else None,
-                                'region': country
-                            })
-                        break
                         
-        # Remove duplicate provider logos by provider name
-        seen_providers = set()
+        # Remove duplicate provider logos by provider name and type
+        seen_keys = set()
         item['watch_providers'] = []
         for p in watch_providers:
-            if p['provider_name'] not in seen_providers:
-                seen_providers.add(p['provider_name'])
+            key = (p['provider_name'], p['type'])
+            if key not in seen_keys:
+                seen_keys.add(key)
                 item['watch_providers'].append(p)
                 
         # Trailer Extraction
@@ -370,6 +464,8 @@ def chat():
             
             return jsonify({'error': 'Empty response from Gemini API'}), 500
         else:
+            if response.status_code == 429:
+                return jsonify({'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'}), 429
             return jsonify({'error': f"Gemini API returned status {response.status_code}", 'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text}), 500
             
     except Exception as e:
@@ -378,69 +474,85 @@ def chat():
 @app.route('/api/discover/mood')
 def discover_by_mood():
     """Gemini-powered mood discovery that maps user moods to TMDB collections"""
-    mood = request.args.get('mood', '').strip()
+    mood = request.args.get('mood', '').strip().lower()
     if not mood:
         return jsonify({'error': 'Mood is required'}), 400
 
-    api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    
-    # Instruct Gemini to return clean JSON
-    system_prompt = (
-        "You are an expert movie matchmaker. Given a mood keyword, suggest exactly 15 movie and TV show titles that perfectly fit that mood. "
-        "Formulate your response as a valid JSON array of objects. Do not include any Markdown tags, code block wraps (like ```json), or notes. "
-        "Each object must have the following keys:\n"
-        "- 'title': The official name of the movie or TV show.\n"
-        "- 'type': A string, either 'movie' or 'tv'.\n\n"
-        "Example Output:\n"
-        "[{\"title\": \"Inception\", \"type\": \"movie\"}, {\"title\": \"Stranger Things\", \"type\": \"tv\"}]"
-    )
-    
-    payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": f"Suggest movies/TV shows for the mood: '{mood}'"}]
-        }],
-        "systemInstruction": {
-            "parts": [{"text": system_prompt}]
-        },
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 600
-        }
-    }
-    
-    params = {
-        'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
-    }
+    movie_suggestions = None
 
-    try:
-        response = requests.post(api_url, params=params, json=payload, timeout=12)
-        if response.status_code != 200:
-            return jsonify({
-                'error': f'Failed to query Gemini API with status {response.status_code}',
-                'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text
-            }), 500
-            
-        result = response.json()
-        candidates = result.get('candidates', [])
-        if not candidates:
-            return jsonify({'error': 'Empty response from Gemini'}), 500
-            
-        text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
+    # Check if the requested mood is stored in the local cache to bypass Gemini rate limits
+    if mood in MOOD_CACHE:
+        movie_suggestions = MOOD_CACHE[mood]
+
+    if not movie_suggestions:
+        # Fallback to querying the Gemini API if not found in the local cache
+        api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         
-        # Clean markdown code block wraps if Gemini returns them
-        if text.startswith("```"):
-            lines = text.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
+        # Instruct Gemini to return clean JSON
+        system_prompt = (
+            "You are an expert movie matchmaker. Given a mood keyword, suggest exactly 15 movie and TV show titles that perfectly fit that mood. "
+            "Formulate your response as a valid JSON array of objects. Do not include any Markdown tags, code block wraps (like ```json), or notes. "
+            "Each object must have the following keys:\n"
+            "- 'title': The official name of the movie or TV show.\n"
+            "- 'type': A string, either 'movie' or 'tv'.\n\n"
+            "Example Output:\n"
+            "[{\"title\": \"Inception\", \"type\": \"movie\"}, {\"title\": \"Stranger Things\", \"type\": \"tv\"}]"
+        )
+        
+        payload = {
+            "contents": [{
+                "role": "user",
+                "parts": [{"text": f"Suggest movies/TV shows for the mood: '{mood}'"}]
+            }],
+            "systemInstruction": {
+                "parts": [{"text": system_prompt}]
+            },
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 600
+            }
+        }
+        
+        params = {
+            'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
+        }
+    
+        try:
+            response = requests.post(api_url, params=params, json=payload, timeout=12)
+            if response.status_code != 200:
+                if response.status_code == 429:
+                    return jsonify({
+                        'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'
+                    }), 429
+                return jsonify({
+                    'error': f'Failed to query Gemini API with status {response.status_code}',
+                    'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text
+                }), 500
+                
+            result = response.json()
+            candidates = result.get('candidates', [])
+            if not candidates:
+                return jsonify({'error': 'Empty response from Gemini'}), 500
+                
+            text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
             
-        movie_suggestions = json.loads(text)
-    except Exception as e:
-        print(f"Error parsing Gemini mood output: {e}")
-        return jsonify({'error': 'Failed to parse recommendation output'}), 500
+            # Clean markdown code block wraps or extract JSON array if Gemini returns conversational text
+            start_idx = text.find('[')
+            end_idx = text.rfind(']')
+            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                text = text[start_idx:end_idx + 1]
+            elif text.startswith("```"):
+                lines = text.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                text = "\n".join(lines).strip()
+                
+            movie_suggestions = json.loads(text)
+        except Exception as e:
+            print(f"Error parsing Gemini mood output: {e}")
+            return jsonify({'error': 'Failed to parse recommendation output'}), 500
 
     # Helper function to enrich items in parallel ThreadPoolExecutor
     def fetch_enriched_tmdb_item(item):
