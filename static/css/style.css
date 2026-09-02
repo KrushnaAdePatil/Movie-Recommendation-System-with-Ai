@@ -378,6 +378,38 @@ body {
     color: var(--primary);
 }
 
+/* Cinematic Universe Chips */
+.cinema-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.cinema-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--bg-border);
+    color: var(--text-muted);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cinema-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.cinema-chip.active {
+    background: linear-gradient(135deg, #7c4dff, #ff1744);
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 4px 15px rgba(124, 77, 255, 0.3);
+}
+
 /* Reset button styling */
 .btn-reset {
     margin-top: 10px;
@@ -477,8 +509,8 @@ body {
 /* Media/Card Grid */
 .movies-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 18px;
     min-height: 400px;
 }
 
@@ -641,10 +673,10 @@ body {
 .modal-content-wrapper {
     background: #0f1016;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    margin: 4% auto;
-    width: 90%;
-    max-width: 900px;
-    max-height: 85vh;
+    margin: 2% auto;
+    width: 95%;
+    max-width: 1400px;
+    max-height: 95vh;
     border-radius: 24px;
     overflow-y: auto;
     position: relative;
@@ -678,7 +710,7 @@ body {
 /* Detail Elements inside Modal */
 .modal-hero {
     position: relative;
-    height: 260px;
+    height: 450px;
     background-size: cover;
     background-position: center top;
 }

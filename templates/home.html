@@ -118,6 +118,10 @@
                         <span class="mood-emoji">😭</span>
                         <span>Emotional</span>
                     </button>
+                    <button class="mood-card" id="mood-anime" onclick="discoverAnime()">
+                        <span class="mood-emoji">🌸</span>
+                        <span>Anime</span>
+                    </button>
                 </div>
             </div>
 
@@ -138,19 +142,20 @@
                 </div>
             </div>
 
-            <!-- Curated collections side-bar links -->
+            <!-- Cinematic Universe Filter -->
             <div class="filter-section">
-                <h3><i class="fas fa-heart"></i> Curated Lists</h3>
-                <div class="collection-list">
-                    <button class="col-item-btn" onclick="loadCuratedList('korean')">
-                        <i class="fas fa-globe-asia"></i> Korean Stars
-                    </button>
-                    <button class="col-item-btn" onclick="loadCuratedList('spanish')">
-                        <i class="fas fa-flag"></i> Spanish Hits
-                    </button>
-                    <button class="col-item-btn" onclick="loadCuratedList('chinese')">
-                        <i class="fas fa-yin-yang"></i> Chinese Epics
-                    </button>
+                <h3><i class="fas fa-globe"></i> Cinematic Universe</h3>
+                <div class="cinema-chips">
+                    <button class="cinema-chip" id="lang-mr" onclick="setIndustry('mr')">Marathi</button>
+                    <button class="cinema-chip" id="lang-hi" onclick="setIndustry('hi')">Bollywood</button>
+                    <button class="cinema-chip" id="lang-en" onclick="setIndustry('en')">Hollywood</button>
+                    <button class="cinema-chip" id="lang-te" onclick="setIndustry('te')">Tollywood</button>
+                    <button class="cinema-chip" id="lang-ta" onclick="setIndustry('ta')">Kollywood</button>
+                    <button class="cinema-chip" id="lang-ml" onclick="setIndustry('ml')">Mollywood</button>
+                    <button class="cinema-chip" id="lang-kn" onclick="setIndustry('kn')">Sandalwood</button>
+                    <button class="cinema-chip" id="lang-ur" onclick="setIndustry('ur')">Lollywood</button>
+                    <button class="cinema-chip" id="lang-bn" onclick="setIndustry('bn')">Dhallywood</button>
+                    <button class="cinema-chip" id="lang-zh" onclick="setIndustry('zh')">Chinese</button>
                 </div>
             </div>
 
@@ -355,6 +360,16 @@
                 <button class="matcher-action-btn like" onclick="swipeMatcherCard('like')">
                     <i class="fas fa-heart"></i>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Person / Actor Deep-Dive Modal -->
+    <div id="personModal" class="modal" style="display: none; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(15px); background: rgba(0,0,0,0.8);">
+        <div class="modal-content-wrapper" style="width: 90%; max-width: 800px; max-height: 90vh; overflow-y: auto; background: rgba(20, 20, 25, 0.95); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); padding: 2rem; position: relative;">
+            <span class="close-btn" onclick="closePersonModal()" style="position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer;"><i class="fas fa-times"></i></span>
+            <div id="personDetails">
+                <!-- Person details inserted dynamically -->
             </div>
         </div>
     </div>

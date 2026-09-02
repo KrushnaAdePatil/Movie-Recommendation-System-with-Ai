@@ -2,30 +2,44 @@ from flask import Flask, render_template, jsonify, request
 import requests
 import json
 import os
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
-TMDB_API_KEY = "cdf27570dfded7636db81e5ec29148e1"
+# Load environment variables from .env if present
+if os.path.exists('.env'):
+    with open('.env', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ[k.strip()] = v.strip()
+
+# Database Initialization
+def init_db():
+    conn = sqlite3.connect('movies.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            media_id TEXT NOT NULL,
+            media_type TEXT NOT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(device_id, media_id, media_type)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 BASE_URL = "https://api.tmdb.org/3"
 IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
-# Curated collections of movies and TV series
-CURATED_MOVIES = {
-    "korean": [
-        {"id": 496243, "type": "movie"}, # Parasite
-        {"id": 93405, "type": "tv"},     # Squid Game
-    ],
-    "chinese": [
-        {"id": 146, "type": "movie"},    # Crouching Tiger, Hidden Dragon
-        {"id": 90223, "type": "tv"},     # The Untamed
-    ],
-    "spanish": [
-        {"id": 1417, "type": "movie"},   # Pan's Labyrinth
-        {"id": 71446, "type": "tv"},     # Money Heist
-    ]
-}
-
+# Curated collections removed
 # Local cache of high-quality movie & TV series suggestions for standard moods to bypass Gemini rate limits
 MOOD_CACHE = {
     "adrenaline": [
@@ -145,51 +159,44 @@ def get_media(media_type, category):
 
 @app.route('/api/<media_type>/discover')
 def discover_media(media_type):
-    """Discover movies/tv shows by genre and release year range (1991-latest)"""
+    """Discover movies/tv shows by genre, provider, language and year"""
     if media_type not in ['movie', 'tv']:
         return jsonify({'error': 'Invalid media type'}), 400
-        
+
+    date_field = 'primary_release_date' if media_type == 'movie' else 'first_air_date'
     params = {
         'api_key': TMDB_API_KEY,
         'language': 'en-US',
         'sort_by': 'popularity.desc',
-        'page': request.args.get('page', 1)
+        'page': request.args.get('page', 1),
+        'with_genres': request.args.get('with_genres'),
+        'with_original_language': request.args.get('with_original_language'),
+        f'{date_field}.gte': f"{request.args.get('year_start', '1991')}-01-01",
+        f'{date_field}.lte': f"{request.args.get('year_end', '2026')}-12-31"
     }
-    
-    genre_ids = request.args.get('with_genres')
-    if genre_ids:
-        params['with_genres'] = genre_ids
 
-    # Watch providers filtering (supporting Netflix, Prime, JioCinema, SonyLIV etc. for India)
-    watch_providers = request.args.get('with_watch_providers')
-    if watch_providers:
-        params['with_watch_providers'] = watch_providers
-        params['watch_region'] = 'IN'
-        params['with_watch_monetization_types'] = 'flatrate|free|ads'
+    if request.args.get('with_watch_providers'):
+        params.update({
+            'with_watch_providers': request.args.get('with_watch_providers'),
+            'watch_region': 'IN',
+            'with_watch_monetization_types': 'flatrate|free|ads'
+        })
+
+    # Keep only provided parameters to keep requests clean
+    params = {k: v for k, v in params.items() if v is not None}
+
+    resp = requests.get(f"{BASE_URL}/discover/{media_type}", params=params)
+    if resp.status_code != 200:
+        return jsonify({'error': f'TMDB API Error: {resp.text}'}), resp.status_code
+
+    data = resp.json()
+    for item in data.get('results', []):
+        item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+        item['display_title'] = item.get('title') or item.get('name')
+        item['display_date'] = item.get('release_date') or item.get('first_air_date')
+        item['media_type'] = media_type
         
-    # Year filter support (1991 to latest)
-    year_start = request.args.get('year_start', '1991')
-    year_end = request.args.get('year_end', '2026')
-    
-    if media_type == 'movie':
-        params['primary_release_date.gte'] = f"{year_start}-01-01"
-        params['primary_release_date.lte'] = f"{year_end}-12-31"
-    else:
-        params['first_air_date.gte'] = f"{year_start}-01-01"
-        params['first_air_date.lte'] = f"{year_end}-12-31"
-        
-    endpoint = f"{BASE_URL}/discover/{media_type}"
-    response = requests.get(endpoint, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get('results', []):
-            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-            item['display_title'] = item.get('title') or item.get('name')
-            item['display_date'] = item.get('release_date') or item.get('first_air_date')
-            item['media_type'] = media_type
-        return jsonify(data)
-    return jsonify({'error': f'Failed to discover {media_type}'}), 500
+    return jsonify(data)
 
 @app.route('/api/<media_type>/search')
 def search_media(media_type):
@@ -208,35 +215,29 @@ def search_media(media_type):
         'page': request.args.get('page', 1)
     }
     
-    endpoint = f"{BASE_URL}/search/{media_type}"
-    response = requests.get(endpoint, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        year_start = int(request.args.get('year_start', 1991))
-        year_end = int(request.args.get('year_end', 2026))
+    resp = requests.get(f"{BASE_URL}/search/{media_type}", params=params)
+    if resp.status_code != 200:
+        return jsonify({'error': f'Search failed: {resp.text}'}), resp.status_code
         
-        filtered_results = []
-        for item in data.get('results', []):
-            date_str = item.get('release_date') or item.get('first_air_date')
-            item_year = None
-            if date_str and len(date_str) >= 4:
-                try:
-                    item_year = int(date_str[:4])
-                except ValueError:
-                    pass
+    data = resp.json()
+    year_start = int(request.args.get('year_start', 1991))
+    year_end = int(request.args.get('year_end', 2026))
+    
+    filtered = []
+    for item in data.get('results', []):
+        date_str = item.get('release_date') or item.get('first_air_date')
+        item_year = int(date_str[:4]) if date_str and len(date_str) >= 4 and date_str[:4].isdigit() else None
+        
+        # Check if year is within constraints
+        if not date_str or item_year is None or (year_start <= item_year <= year_end):
+            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+            item['display_title'] = item.get('title') or item.get('name')
+            item['display_date'] = date_str
+            item['media_type'] = media_type
+            filtered.append(item)
             
-            # Check if year is within constraints
-            if not date_str or item_year is None or (year_start <= item_year <= year_end):
-                item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-                item['display_title'] = item.get('title') or item.get('name')
-                item['display_date'] = date_str
-                item['media_type'] = media_type
-                filtered_results.append(item)
-                
-        data['results'] = filtered_results
-        return jsonify(data)
-    return jsonify({'error': f'Failed to search {media_type}'}), 500
+    data['results'] = filtered
+    return jsonify(data)
 
 @app.route('/api/<media_type>/<int:media_id>')
 def get_media_details(media_type, media_id):
@@ -247,7 +248,7 @@ def get_media_details(media_type, media_id):
     params = {
         'api_key': TMDB_API_KEY,
         'language': 'en-US',
-        'append_to_response': 'videos,recommendations'
+        'append_to_response': 'videos,recommendations,credits'
     }
     
     endpoint = f"{BASE_URL}/{media_type}/{media_id}"
@@ -340,29 +341,7 @@ def get_media_details(media_type, media_id):
         return jsonify(item)
     return jsonify({'error': f'Failed to fetch {media_type} details'}), 500
 
-@app.route('/api/curated/<collection>')
-def get_curated(collection):
-    """Get curated media collections (support both movies & series)"""
-    media_list = CURATED_MOVIES.get(collection, [])
-    enriched = []
-    
-    for media in media_list:
-        m_type = media['type']
-        endpoint = f"{BASE_URL}/{m_type}/{media['id']}"
-        params = {
-            'api_key': TMDB_API_KEY,
-            'language': 'en-US'
-        }
-        response = requests.get(endpoint, params=params)
-        if response.status_code == 200:
-            details = response.json()
-            details['poster_url'] = f"{IMAGE_BASE_URL}{details['poster_path']}" if details.get('poster_path') else None
-            details['display_title'] = details.get('title') or details.get('name')
-            details['display_date'] = details.get('release_date') or details.get('first_air_date')
-            details['media_type'] = m_type
-            enriched.append(details)
-            
-    return jsonify({'results': enriched})
+
 
 @app.route('/api/<media_type>/genres')
 def get_genres(media_type):
@@ -383,22 +362,95 @@ def get_trending(media_type):
     if media_type not in ['movie', 'tv']:
         return jsonify({'error': 'Invalid media type'}), 400
         
-    endpoint = f"{BASE_URL}/trending/{media_type}/week"
+    params = {'api_key': TMDB_API_KEY, 'language': 'en-US'}
+    resp = requests.get(f"{BASE_URL}/trending/{media_type}/week", params=params)
+    
+    if resp.status_code != 200:
+        return jsonify({'error': f'Trending failed: {resp.text}'}), resp.status_code
+        
+    data = resp.json()
+    for item in data.get('results', []):
+        item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+        item['display_title'] = item.get('title') or item.get('name')
+        item['display_date'] = item.get('release_date') or item.get('first_air_date')
+        item['media_type'] = media_type
+        
+    return jsonify(data)
+
+@app.route('/api/person/<person_id>')
+def get_person(person_id):
+    """Fetch person bio and credits"""
+    endpoint = f"{BASE_URL}/person/{person_id}"
     params = {
         'api_key': TMDB_API_KEY,
-        'language': 'en-US'
+        'language': 'en-US',
+        'append_to_response': 'combined_credits'
     }
-    response = requests.get(endpoint, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get('results', []):
-            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-            item['display_title'] = item.get('title') or item.get('name')
-            item['display_date'] = item.get('release_date') or item.get('first_air_date')
-            item['media_type'] = media_type
+    resp = requests.get(endpoint, params=params)
+    if resp.status_code == 200:
+        data = resp.json()
+        data['profile_url'] = f"{IMAGE_BASE_URL}{data['profile_path']}" if data.get('profile_path') else None
+        
+        # Sort combined credits by popularity
+        credits = data.get('combined_credits', {}).get('cast', [])
+        credits.sort(key=lambda x: x.get('popularity', 0), reverse=True)
+        # We cap it at 15 to keep the frontend clean
+        top_credits = credits[:15]
+        
+        for c in top_credits:
+            c['poster_url'] = f"{IMAGE_BASE_URL}{c['poster_path']}" if c.get('poster_path') else None
+            c['display_title'] = c.get('title') or c.get('name')
+        
+        data['top_credits'] = top_credits
         return jsonify(data)
-    return jsonify({'error': f'Failed to fetch TV/Movie trending'}), 500
+        
+    return jsonify({'error': 'Failed to fetch person details'}), 500
 
+@app.route('/api/trivia/<media_type>/<media_id>')
+def get_trivia(media_type, media_id):
+    """Fetch fun trivia using Gemini"""
+    # 1. First fetch title/year from TMDB
+    tmdb_endpoint = f"{BASE_URL}/{media_type}/{media_id}"
+    tmdb_params = {'api_key': TMDB_API_KEY, 'language': 'en-US'}
+    resp = requests.get(tmdb_endpoint, params=tmdb_params)
+    if resp.status_code != 200:
+        return jsonify({'error': 'Failed to fetch media from TMDB'}), 500
+        
+    media = resp.json()
+    title = media.get('title') or media.get('name')
+    date = media.get('release_date') or media.get('first_air_date', '')
+    year = date[:4] if date else "Unknown Year"
+    
+    # 2. Ask OpenAI for trivia
+    api_url = "https://api.openai.com/v1/chat/completions"
+    prompt = f"Give me exactly 3 fascinating behind-the-scenes facts or Easter eggs about the {media_type} '{title}' ({year}). Make them concise, exciting, and bullet-pointed with emojis."
+    
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.8,
+        "max_tokens": 400
+    }
+    
+    openai_key = os.environ.get("GEMINI_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {openai_key}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        g_resp = requests.post(api_url, headers=headers, json=payload, timeout=10)
+        if g_resp.status_code == 200:
+            result = g_resp.json()
+            if result.get('choices'):
+                trivia = result['choices'][0]['message']['content']
+                return jsonify({'success': True, 'trivia': trivia})
+    except Exception as e:
+        print(f"Trivia error: {e}")
+        
+    return jsonify({'error': 'Failed to generate trivia.'}), 500
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """Proxy chatbot requests to the Gemini API with custom system instructions."""
@@ -409,64 +461,72 @@ def chat():
     if not user_message:
         return jsonify({'error': 'Message required'}), 400
         
-    # Append the new user message to the history we send to Gemini
-    contents = list(history)
-    contents.append({
-        'role': 'user',
-        'parts': [{'text': user_message}]
+    # Append the new user message to the history we send to OpenAI
+    messages = []
+    
+    # System Instruction
+    messages.append({
+        "role": "system",
+        "content": (
+            "You are MovieBot 🍿🎬, a super cute, warm, and hyper-enthusiastic movie and series suggestion assistant. "
+            "Your goal is to help users find the perfect movies or TV shows to watch based on their request.\n\n"
+            "CRITICAL INSTRUCTION: When recommending or mentioning any specific movie or series, you MUST wrap it in one of these two custom Markdown formats:\n"
+            "1. If you know or are highly confident about its TMDb ID (e.g. standard popular movies/series), use: [Title (Year)](show-media:movie_or_tv:tmdb_id). Examples:\n"
+            "   - [Black Panther (2018)](show-media:movie:284054)\n"
+            "   - [Stranger Things (2016)](show-media:tv:66732)\n"
+            "2. Otherwise, use: [Title (Year)](search-media:movie_or_tv:title). Example:\n"
+            "   - [Interstellar (2014)](search-media:movie:Interstellar)\n\n"
+            "Follow these style rules strictly:\n"
+            "- Keep answers concise, delightful, and very easy to read. Use bullet points for lists of movies/series.\n"
+            "- Greet users warmly and use a lot of expressive emojis (like 🍿, 🎬, ✨, 🌟, 😍, 🤖).\n"
+            "- Always suggest relevant movie titles, matching genres, years, or vibes. Mention release years.\n"
+            "- If a user asks about non-movie topics, politely and cute-style redirect them back to movie/series suggestions.\n"
+            "- Be helpful and cute!"
+        )
     })
     
-    # Restrict history length to prevent huge context costs for simple chatting
-    if len(contents) > 20:
-        contents = contents[-20:]
+    # Convert Gemini-style history to OpenAI format
+    for h in history:
+        r = "assistant" if h.get("role") == "model" else "user"
+        txt = h.get("parts", [{}])[0].get("text", "")
+        messages.append({"role": r, "content": txt})
         
-    api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    messages.append({"role": "user", "content": user_message})
+    
+    # Restrict history length to prevent huge context costs for simple chatting
+    if len(messages) > 20:
+        # Keep system prompt, take last 19 messages
+        messages = [messages[0]] + messages[-19:]
+        
+    api_url = "https://api.openai.com/v1/chat/completions"
     
     payload = {
-        "contents": contents,
-        "systemInstruction": {
-            "parts": [{"text": (
-                "You are MovieBot 🍿🎬, a super cute, warm, and hyper-enthusiastic movie and series suggestion assistant. "
-                "Your goal is to help users find the perfect movies or TV shows to watch based on their request.\n\n"
-                "CRITICAL INSTRUCTION: When recommending or mentioning any specific movie or series, you MUST wrap it in one of these two custom Markdown formats:\n"
-                "1. If you know or are highly confident about its TMDb ID (e.g. standard popular movies/series), use: [Title (Year)](show-media:movie_or_tv:tmdb_id). Examples:\n"
-                "   - [Black Panther (2018)](show-media:movie:284054)\n"
-                "   - [Stranger Things (2016)](show-media:tv:66732)\n"
-                "2. Otherwise, use: [Title (Year)](search-media:movie_or_tv:title). Example:\n"
-                "   - [Interstellar (2014)](search-media:movie:Interstellar)\n\n"
-                "Follow these style rules strictly:\n"
-                "- Keep answers concise, delightful, and very easy to read. Use bullet points for lists of movies/series.\n"
-                "- Greet users warmly and use a lot of expressive emojis (like 🍿, 🎬, ✨, 🌟, 😍, 🤖).\n"
-                "- Always suggest relevant movie titles, matching genres, years, or vibes. Mention release years.\n"
-                "- If a user asks about non-movie topics, politely and cute-style redirect them back to movie/series suggestions.\n"
-                "- Be helpful and cute!"
-            )}]
-        },
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 600
-        }
+        "model": "gpt-4o-mini",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 600
     }
     
-    params = {
-        'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
+    openai_key = os.environ.get("GEMINI_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {openai_key}",
+        "Content-Type": "application/json"
     }
     
     try:
-        response = requests.post(api_url, params=params, json=payload, timeout=15)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=15)
         if response.status_code == 200:
             result = response.json()
-            candidates = result.get('candidates', [])
-            if candidates:
-                text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+            if result.get('choices'):
+                text = result['choices'][0]['message']['content']
                 if text:
                     return jsonify({'response': text})
             
-            return jsonify({'error': 'Empty response from Gemini API'}), 500
+            return jsonify({'error': 'Empty response from OpenAI API'}), 500
         else:
             if response.status_code == 429:
-                return jsonify({'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'}), 429
-            return jsonify({'error': f"Gemini API returned status {response.status_code}", 'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text}), 500
+                return jsonify({'error': 'OpenAI API rate limit exceeded. Please wait a moment and try again! 🍿⏳'}), 429
+            return jsonify({'error': f"OpenAI API returned status {response.status_code}", 'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text}), 500
             
     except Exception as e:
         return jsonify({'error': f"Failed to connect to Gemini API: {str(e)}"}), 500
@@ -485,10 +545,10 @@ def discover_by_mood():
         movie_suggestions = MOOD_CACHE[mood]
 
     if not movie_suggestions:
-        # Fallback to querying the Gemini API if not found in the local cache
-        api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        # Fallback to querying the OpenAI API if not found in the local cache
+        api_url = "https://api.openai.com/v1/chat/completions"
         
-        # Instruct Gemini to return clean JSON
+        # Instruct OpenAI to return clean JSON
         system_prompt = (
             "You are an expert movie matchmaker. Given a mood keyword, suggest exactly 15 movie and TV show titles that perfectly fit that mood. "
             "Formulate your response as a valid JSON array of objects. Do not include any Markdown tags, code block wraps (like ```json), or notes. "
@@ -500,43 +560,40 @@ def discover_by_mood():
         )
         
         payload = {
-            "contents": [{
-                "role": "user",
-                "parts": [{"text": f"Suggest movies/TV shows for the mood: '{mood}'"}]
-            }],
-            "systemInstruction": {
-                "parts": [{"text": system_prompt}]
-            },
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 600
-            }
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Suggest movies/TV shows for the mood: '{mood}'"}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 600
         }
         
-        params = {
-            'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
+        openai_key = os.environ.get('GEMINI_API_KEY')
+        headers = {
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": "application/json"
         }
     
         try:
-            response = requests.post(api_url, params=params, json=payload, timeout=12)
+            response = requests.post(api_url, headers=headers, json=payload, timeout=12)
             if response.status_code != 200:
                 if response.status_code == 429:
                     return jsonify({
-                        'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'
+                        'error': 'OpenAI API rate limit exceeded. Please wait a moment and try again! 🍿⏳'
                     }), 429
                 return jsonify({
-                    'error': f'Failed to query Gemini API with status {response.status_code}',
+                    'error': f'Failed to query OpenAI API with status {response.status_code}',
                     'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text
                 }), 500
                 
             result = response.json()
-            candidates = result.get('candidates', [])
-            if not candidates:
-                return jsonify({'error': 'Empty response from Gemini'}), 500
+            if not result.get('choices'):
+                return jsonify({'error': 'Empty response from OpenAI'}), 500
                 
-            text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
+            text = result['choices'][0]['message']['content'].strip()
             
-            # Clean markdown code block wraps or extract JSON array if Gemini returns conversational text
+            # Clean markdown code block wraps or extract JSON array if OpenAI returns conversational text
             start_idx = text.find('[')
             end_idx = text.rfind(']')
             if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
@@ -609,6 +666,65 @@ def discover_by_mood():
         'total_results': len(enriched_results),
         'total_pages': 1
     })
+
+# --- Watchlist Database Endpoints ---
+
+@app.route('/api/db/watchlist/get', methods=['GET'])
+def get_watchlist():
+    device_id = request.args.get('device_id')
+    if not device_id:
+        return jsonify({'error': 'device_id required'}), 400
+    
+    conn = sqlite3.connect('movies.db')
+    c = conn.cursor()
+    c.execute('SELECT media_id, media_type, added_at FROM watchlist WHERE device_id = ? ORDER BY added_at DESC', (device_id,))
+    rows = c.fetchall()
+    conn.close()
+    
+    results = [{"id": r[0], "type": r[1], "added_at": r[2]} for r in rows]
+    return jsonify({'success': True, 'results': results})
+
+@app.route('/api/db/watchlist/add', methods=['POST'])
+def add_watchlist():
+    data = request.json or {}
+    device_id = data.get('device_id')
+    media_id = str(data.get('media_id'))
+    media_type = data.get('media_type')
+    
+    if not device_id or not media_id or not media_type:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    try:
+        conn = sqlite3.connect('movies.db')
+        c = conn.cursor()
+        c.execute('INSERT OR IGNORE INTO watchlist (device_id, media_id, media_type) VALUES (?, ?, ?)', 
+                  (device_id, media_id, media_type))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/db/watchlist/remove', methods=['POST'])
+def remove_watchlist():
+    data = request.json or {}
+    device_id = data.get('device_id')
+    media_id = str(data.get('media_id'))
+    media_type = data.get('media_type')
+    
+    if not device_id or not media_id or not media_type:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    try:
+        conn = sqlite3.connect('movies.db')
+        c = conn.cursor()
+        c.execute('DELETE FROM watchlist WHERE device_id = ? AND media_id = ? AND media_type = ?', 
+                  (device_id, media_id, media_type))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
