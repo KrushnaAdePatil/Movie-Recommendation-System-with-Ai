@@ -115,6 +115,47 @@ MOOD_CACHE = {
     ]
 }
 
+def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=30):
+    """Helper to fetch exact number of results by managing TMDB 20-item pages"""
+    start_idx = (req_page_num - 1) * page_size
+    end_idx = req_page_num * page_size
+    
+    start_tmdb_page = (start_idx // 20) + 1
+    end_tmdb_page = ((end_idx - 1) // 20) + 1
+    
+    def fetch_page(p):
+        page_params = params.copy()
+        page_params['page'] = p
+        resp = requests.get(endpoint, params=page_params)
+        if resp.status_code == 200:
+            return resp.json().get('results', [])
+        return []
+
+    if start_tmdb_page == end_tmdb_page:
+        tmdb_results = fetch_page(start_tmdb_page)
+        offset_in_page = start_idx % 20
+        sliced_results = tmdb_results[offset_in_page : offset_in_page + page_size]
+    else:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            pages = list(executor.map(fetch_page, range(start_tmdb_page, end_tmdb_page + 1)))
+        merged = []
+        for p_res in pages:
+            merged.extend(p_res)
+        offset_in_first = start_idx % 20
+        sliced_results = merged[offset_in_first : offset_in_first + page_size]
+        
+    for item in sliced_results:
+        item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+        item['display_title'] = item.get('title') or item.get('name')
+        item['display_date'] = item.get('release_date') or item.get('first_air_date')
+        item['media_type'] = media_type
+        
+    return {
+        'page': req_page_num,
+        'results': sliced_results,
+        'total_pages': 500  # Estimate
+    }
+
 @app.route('/')
 def index():
     return render_template('home.html')
@@ -128,20 +169,12 @@ def get_media(media_type, category):
     endpoint = f"{BASE_URL}/{media_type}/{category}"
     params = {
         'api_key': TMDB_API_KEY,
-        'language': 'en-US',
-        'page': request.args.get('page', 1)
+        'language': 'en-US'
     }
     
-    response = requests.get(endpoint, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get('results', []):
-            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-            item['display_title'] = item.get('title') or item.get('name')
-            item['display_date'] = item.get('release_date') or item.get('first_air_date')
-            item['media_type'] = media_type
-        return jsonify(data)
-    return jsonify({'error': f'Failed to fetch {media_type}'}), 500
+    req_page = int(request.args.get('page', 1))
+    data = fetch_tmdb_paginated(endpoint, params, req_page, media_type)
+    return jsonify(data)
 
 @app.route('/api/<media_type>/discover')
 def discover_media(media_type):
@@ -152,9 +185,12 @@ def discover_media(media_type):
     params = {
         'api_key': TMDB_API_KEY,
         'language': 'en-US',
-        'sort_by': 'popularity.desc',
-        'page': request.args.get('page', 1)
+        'sort_by': 'popularity.desc'
     }
+    
+    include_adult = request.args.get('include_adult')
+    if include_adult == 'true':
+        params['include_adult'] = 'true'
     
     genre_ids = request.args.get('with_genres')
     if genre_ids:
@@ -165,7 +201,6 @@ def discover_media(media_type):
     if watch_providers:
         params['with_watch_providers'] = watch_providers
         params['watch_region'] = 'IN'
-        params['with_watch_monetization_types'] = 'flatrate|free|ads'
         
     # Regional / Language filtering
     original_language = request.args.get('with_original_language')
@@ -184,17 +219,10 @@ def discover_media(media_type):
         params['first_air_date.lte'] = f"{year_end}-12-31"
         
     endpoint = f"{BASE_URL}/discover/{media_type}"
-    response = requests.get(endpoint, params=params)
+    req_page = int(request.args.get('page', 1))
     
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get('results', []):
-            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-            item['display_title'] = item.get('title') or item.get('name')
-            item['display_date'] = item.get('release_date') or item.get('first_air_date')
-            item['media_type'] = media_type
-        return jsonify(data)
-    return jsonify({'error': f'Failed to discover {media_type}'}), 500
+    data = fetch_tmdb_paginated(endpoint, params, req_page, media_type)
+    return jsonify(data)
 
 @app.route('/api/<media_type>/search')
 def search_media(media_type):
@@ -393,16 +421,9 @@ def get_trending(media_type):
         'api_key': TMDB_API_KEY,
         'language': 'en-US'
     }
-    response = requests.get(endpoint, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get('results', []):
-            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-            item['display_title'] = item.get('title') or item.get('name')
-            item['display_date'] = item.get('release_date') or item.get('first_air_date')
-            item['media_type'] = media_type
-        return jsonify(data)
-    return jsonify({'error': f'Failed to fetch TV/Movie trending'}), 500
+    req_page = int(request.args.get('page', 1))
+    data = fetch_tmdb_paginated(endpoint, params, req_page, media_type)
+    return jsonify(data)
 
 @app.route('/api/chat', methods=['POST'])
 def chat():

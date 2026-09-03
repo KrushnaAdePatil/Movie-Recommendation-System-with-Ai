@@ -8,10 +8,7 @@ let maxYear = 2026;
 let currentPage = 1;
 let currentQuery = '';
 let currentCategory = 'normal'; // default category
-let activeCuratedCollection = null;
-
-// Watchlist Shelf lists
-let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
+let activeMood = null;
 let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
 let activeDrawerTab = 'watchlist';
 
@@ -116,21 +113,16 @@ function getGenreMapping(genreId, type) {
 }
 
 function toggleGenre(genreId, elementIdSuffix) {
-    // Curated lists and industry selection override active categories
-    activeCuratedCollection = null;
-    deactivateCuratedButtons();
-    selectedLanguage = null; // Clear industry filters if manually toggling genre outside of industry selection
-
     const card = document.getElementById(`genre-${elementIdSuffix}`);
     const isActive = card.classList.contains('active');
 
-    // Clear other active genre cards
-    document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
-
     if (isActive) {
         selectedGenreId = null;
+        card.classList.remove('active');
     } else {
         selectedGenreId = genreId;
+        // Don't clear others, but update UI
+        document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
     }
 
@@ -141,26 +133,17 @@ function toggleGenre(genreId, elementIdSuffix) {
 }
 
 function loadAnime() {
-    activeCuratedCollection = null;
-    deactivateCuratedButtons();
-    document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
-    document.getElementById('searchInput').value = '';
-    currentQuery = '';
-    selectedProviderId = null;
-    document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+    selectedGenreId = 16;
+    selectedLanguage = 'ja';
+    currentCategory = 'discover';
+    currentPage = 1;
 
-    // Deactivate mood selection since Anime is its own category of discovery via TMDB
-    activeMood = null;
+    // Update UI without clearing others
+    document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
     const animeCard = document.getElementById('mood-anime');
     if (animeCard) animeCard.classList.add('active');
 
-    // Set discover parameters for Japanese Anime (Animation genre: 16)
-    selectedGenreId = 16;
-    selectedLanguage = 'ja';
-    currentCategory = 'discover';
-
-    currentPage = 1;
     document.getElementById('catalogTitle').innerHTML = `Anime (TMDb)`;
     loadContent();
 }
@@ -173,19 +156,12 @@ function setIndustry(languageCode) {
 
     if (isActive) {
         selectedLanguage = null;
+        card.classList.remove('active');
     } else {
         selectedLanguage = languageCode;
+        document.querySelectorAll('.industry-btn').forEach(b => b.classList.remove('active'));
         card.classList.add('active');
     }
-
-    // Reset others
-    activeCuratedCollection = null;
-    deactivateCuratedButtons(); // Wait, industry-btn might share col-item-btn classes, let's keep them separate
-    // Re-apply active class to this industry button if it was cleared
-    if (selectedLanguage) { card.classList.add('active'); }
-
-    document.getElementById('searchInput').value = '';
-    currentQuery = '';
 
     currentPage = 1;
     currentCategory = 'discover';
@@ -402,19 +378,23 @@ async function loadContent() {
     if (currentCategory === 'search') {
         url = `/api/${mediaType}/search?query=${encodeURIComponent(currentQuery)}&year_start=${minYear}&year_end=${maxYear}&page=${currentPage}`;
     }
-    // 1.5. Mood Discovery active
-    else if (currentCategory === 'mood') {
-        url = `/api/discover/mood?mood=${activeMood}`;
-    }
     // 2. Curated collections active
     else if (currentCategory === 'curated') {
         url = `/api/curated/${activeCuratedCollection}`;
     }
     // 3. Discovery Filter (Genre selection, Streaming providers, Regional Language, and/or Year range adjustments)
-    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null || selectedLanguage !== null) {
+    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null || selectedLanguage !== null || activeMood !== null) {
         let extraParams = '';
         if (selectedGenreId !== null) {
             extraParams += `&with_genres=${getGenreMapping(selectedGenreId, mediaType)}`;
+        }
+        if (activeMood !== null) {
+            if (activeMood === 'spooky') extraParams += `&with_genres=27,9648`;
+            else if (activeMood === 'emotional') extraParams += `&with_genres=18,10749`;
+            else if (activeMood === 'adrenaline') extraParams += `&with_genres=28,53`;
+            else if (activeMood === 'mindbending') extraParams += `&with_genres=878,9648`;
+            else if (activeMood === 'cozy') extraParams += `&with_genres=10751,35`;
+            else if (activeMood === 'romance') extraParams += `&with_genres=10749&include_adult=true`;
         }
         if (selectedProviderId !== null) {
             extraParams += `&with_watch_providers=${selectedProviderId}`;
@@ -1241,27 +1221,19 @@ function toggleCustomFullscreen() {
    ========================================================================== */
 function toggleProvider(providerId, providerName) {
     const element = document.getElementById(`prov-${providerName}`);
+    const isActive = element.classList.contains('active');
 
-    // Toggle active state
-    if (selectedProviderId === providerId) {
+    if (isActive) {
         selectedProviderId = null;
         element.classList.remove('active');
     } else {
         selectedProviderId = providerId;
-        // deactivate other providers (since we only support single provider filtering at a time for ease of UI)
         document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
         element.classList.add('active');
-
-        // Deactivate search queries / curated lists so streaming filters are prioritized
-        currentQuery = '';
-        selectedLanguage = null;
-        document.getElementById('searchInput').value = '';
-        activeCuratedCollection = null;
-        deactivateCuratedButtons();
     }
 
     currentPage = 1;
-    currentCategory = selectedProviderId ? 'discover' : 'trending';
+    currentCategory = 'discover';
     updateCategorySubHeader();
     loadContent();
 }
@@ -1269,37 +1241,24 @@ function toggleProvider(providerId, providerName) {
 /* ==========================================================================
    Mood Discovery Feature
    ========================================================================== */
-let activeMood = null;
 
-async function discoverByMood(mood) {
+
+function discoverByMood(mood) {
     const card = document.getElementById(`mood-${mood}`);
+    const isActive = card.classList.contains('active');
 
-    // Toggle active state
-    if (activeMood === mood) {
+    // Remove old Gemini category logic, map to TMDB instead in loadContent
+    if (isActive) {
         activeMood = null;
         card.classList.remove('active');
-        currentCategory = 'normal';
-        document.getElementById('catalogTitle').innerText = 'Suggested Right Now';
     } else {
         activeMood = mood;
         document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
-
-        // Deactivate search queries / curated lists / provider filters
-        currentQuery = '';
-        document.getElementById('searchInput').value = '';
-        selectedProviderId = null;
-        selectedLanguage = null;
-        selectedGenreId = null;
-        document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
-        activeCuratedCollection = null;
-        deactivateCuratedButtons();
-
-        currentCategory = 'mood';
-        document.getElementById('catalogTitle').innerText = `Mood: ${mood.toUpperCase()}`;
     }
 
     currentPage = 1;
+    currentCategory = 'discover';
     updateCategorySubHeader();
     loadContent();
 }

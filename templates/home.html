@@ -118,6 +118,10 @@
                         <span class="mood-emoji">😭</span>
                         <span>Emotional</span>
                     </button>
+                    <button class="mood-card" id="mood-romance" onclick="discoverByMood('romance')">
+                        <span class="mood-emoji">💕</span>
+                        <span>Romance</span>
+                    </button>
                     <button class="mood-card" id="mood-anime" onclick="loadAnime()">
                         <span class="mood-emoji">🌸</span>
                         <span>Anime</span>
@@ -128,38 +132,47 @@
             <!-- Regional Cinema / Film Industry Section -->
             <div class="filter-section">
                 <h3><i class="fas fa-video"></i> Film Industry</h3>
-                <p class="filter-subtitle">Explore regional cinema</p>
-                <div class="collection-list">
-                    <!-- Default to Marathi if requested by user, handled in JS or just labeled as default -->
-                    <button class="col-item-btn industry-btn" id="ind-mr" onclick="setIndustry('mr')">
-                        <i class="fas fa-film"></i> Marathi Cinema
+                <p class="filter-subtitle">Explore regional cinema by language</p>
+                <div class="industry-grid">
+                    <button class="mood-card industry-btn" id="ind-mr" onclick="setIndustry('mr')">
+                        <span class="mood-emoji">🪔</span>
+                        <span>Marathi Cinema</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-hi" onclick="setIndustry('hi')">
-                        <i class="fas fa-film"></i> Bollywood
+                    <button class="mood-card industry-btn" id="ind-hi" onclick="setIndustry('hi')">
+                        <span class="mood-emoji">💃</span>
+                        <span>Bollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-en" onclick="setIndustry('en')">
-                        <i class="fas fa-film"></i> Hollywood
+                    <button class="mood-card industry-btn" id="ind-en" onclick="setIndustry('en')">
+                        <span class="mood-emoji">🎬</span>
+                        <span>Hollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-te" onclick="setIndustry('te')">
-                        <i class="fas fa-film"></i> Tollywood
+                    <button class="mood-card industry-btn" id="ind-te" onclick="setIndustry('te')">
+                        <span class="mood-emoji">⚔️</span>
+                        <span>Tollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-ml" onclick="setIndustry('ml')">
-                        <i class="fas fa-film"></i> Mollywood
+                    <button class="mood-card industry-btn" id="ind-ml" onclick="setIndustry('ml')">
+                        <span class="mood-emoji">⛰️</span>
+                        <span>Mollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-ta" onclick="setIndustry('ta')">
-                        <i class="fas fa-film"></i> Kollywood
+                    <button class="mood-card industry-btn" id="ind-ta" onclick="setIndustry('ta')">
+                        <span class="mood-emoji">🐯</span>
+                        <span>Kollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-kn" onclick="setIndustry('kn')">
-                        <i class="fas fa-film"></i> Sandalwood
+                    <button class="mood-card industry-btn" id="ind-kn" onclick="setIndustry('kn')">
+                        <span class="mood-emoji">🐘</span>
+                        <span>Sandalwood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-yo" onclick="setIndustry('yo')">
-                        <i class="fas fa-film"></i> Nollywood
+                    <button class="mood-card industry-btn" id="ind-yo" onclick="setIndustry('yo')">
+                        <span class="mood-emoji">🌍</span>
+                        <span>Nollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-ur" onclick="setIndustry('ur')">
-                        <i class="fas fa-film"></i> Lollywood
+                    <button class="mood-card industry-btn" id="ind-ur" onclick="setIndustry('ur')">
+                        <span class="mood-emoji">🌙</span>
+                        <span>Lollywood</span>
                     </button>
-                    <button class="col-item-btn industry-btn" id="ind-zh" onclick="setIndustry('zh')">
-                        <i class="fas fa-film"></i> Chinawood
+                    <button class="mood-card industry-btn" id="ind-zh" onclick="setIndustry('zh')">
+                        <span class="mood-emoji">🐲</span>
+                        <span>Chinawood</span>
                     </button>
                 </div>
             </div>
@@ -181,21 +194,7 @@
                 </div>
             </div>
 
-            <!-- Curated collections side-bar links -->
-            <div class="filter-section">
-                <h3><i class="fas fa-heart"></i> Curated Lists</h3>
-                <div class="collection-list">
-                    <button class="col-item-btn" onclick="loadCuratedList('korean')">
-                        <i class="fas fa-globe-asia"></i> Korean Stars
-                    </button>
-                    <button class="col-item-btn" onclick="loadCuratedList('spanish')">
-                        <i class="fas fa-flag"></i> Spanish Hits
-                    </button>
-                    <button class="col-item-btn" onclick="loadCuratedList('chinese')">
-                        <i class="fas fa-yin-yang"></i> Chinese Epics
-                    </button>
-                </div>
-            </div>
+
 
             <!-- Streaming Services Filter -->
             <div class="filter-section">
@@ -225,6 +224,10 @@
                     <button class="provider-card" id="prov-zee5" onclick="toggleProvider(232, 'zee5')">
                         <img src="https://image.tmdb.org/t/p/w200/cakduIXxOWnOasbKSMZ6Xvw5REG.png" alt="ZEE5">
                         <span>ZEE5</span>
+                    </button>
+                    <button class="provider-card" id="prov-apple" onclick="toggleProvider('2|350', 'apple')">
+                        <img src="https://image.tmdb.org/t/p/w200/6uhKBfmtzFqcgC5alysNq8i9tW0.jpg" alt="Apple TV+">
+                        <span>Apple TV</span>
                     </button>
                 </div>
             </div>

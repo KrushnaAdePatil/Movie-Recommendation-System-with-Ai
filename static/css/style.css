@@ -342,49 +342,11 @@ body {
     cursor: pointer;
 }
 
-/* Curated Collection Menu */
-.collection-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.col-item-btn {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--bg-border);
-    border-radius: 10px;
-    padding: 10px 14px;
-    color: var(--text-main);
-    text-align: left;
-    font-family: inherit;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transition: all 0.2s ease;
-}
-
-.col-item-btn i {
-    width: 16px;
-    color: var(--text-muted);
-}
-
-.col-item-btn:hover {
-    background: rgba(229, 9, 20, 0.08);
-    border-color: rgba(229, 9, 20, 0.3);
-    padding-left: 18px;
-}
-
-.col-item-btn.active {
-    background: rgba(229, 9, 20, 0.15);
-    border-color: var(--primary);
-    font-weight: 700;
-}
-
-.col-item-btn.active i {
-    color: var(--primary);
+/* Industry grid equivalent to mood grid */
+.industry-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
 }
 
 /* Reset button styling */
@@ -487,8 +449,8 @@ body {
 /* Media/Card Grid */
 .movies-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
     min-height: 400px;
 }
 
