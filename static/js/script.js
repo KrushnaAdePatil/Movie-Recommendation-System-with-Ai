@@ -2,12 +2,12 @@
 let mediaType = 'movie'; // 'movie' or 'tv'
 let selectedGenreId = null;
 let selectedProviderId = null;
-let selectedLanguage = null;
 let minYear = 1991;
 let maxYear = 2026;
 let currentPage = 1;
 let currentQuery = '';
-let currentCategory = 'trending'; // 'trending', 'popular', 'top_rated'
+let currentCategory = 'trending'; // 'trending', 'popular', 'top_rated', 'curated'
+let activeCuratedCollection = null;
 
 // Watchlist Shelf lists
 let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
@@ -21,36 +21,8 @@ let searchSuggestTimeout = null;
 let ytPlayer = null;
 let ytPlayerTimer = null;
 
-// Generate or Retrieve Device ID
-function getDeviceId() {
-    let devId = localStorage.getItem('device_id');
-    if (!devId) {
-        devId = 'device-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
-        localStorage.setItem('device_id', devId);
-    }
-    return devId;
-}
-
-// Sync with DB on load
-async function loadWatchlistFromDB() {
-    try {
-        const deviceId = getDeviceId();
-        const res = await fetch(`/api/db/watchlist/get?device_id=${deviceId}`);
-        const data = await res.json();
-        if (data.success) {
-            const dbIds = new Set(data.results.map(i => `${i.id}-${i.type}`));
-            // Keep local data (titles, posters) but only those present in DB
-            watchlist = watchlist.filter(m => dbIds.has(`${m.id}-${m.type}`));
-            localStorage.setItem('watchlist', JSON.stringify(watchlist));
-        }
-    } catch (e) {
-        console.error("DB Load Error", e);
-    }
-}
-
 // Initialize
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadWatchlistFromDB();
+document.addEventListener('DOMContentLoaded', () => {
     initializeSliders();
     setupSearch();
     loadContent();
@@ -122,41 +94,9 @@ function setMediaType(type) {
 
     // Reset pages & load
     currentPage = 1;
+    activeCuratedCollection = null;
+    deactivateCuratedButtons();
     loadContent();
-}
-
-async function surpriseMe() {
-    grid.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><p>Rolling the dice...</p></div>';
-
-    // Pick a random page between 1 and 20 for more variety
-    const randomPage = Math.floor(Math.random() * 20) + 1;
-
-    try {
-        const response = await fetch(`/api/${mediaType}/popular?page=${randomPage}`);
-        const data = await response.json();
-
-        if (data.results && data.results.length > 0) {
-            // Pick a random item from the page results
-            const randomIndex = Math.floor(Math.random() * data.results.length);
-            const surpriseItem = data.results[randomIndex];
-
-            // Set it up as if we searched for it
-            renderCards([surpriseItem]);
-
-            // Automatically pop up the modal for the surprise item
-            setTimeout(() => {
-                showDetailsModal(surpriseItem.id, surpriseItem.media_type || mediaType, surpriseItem);
-            }, 500);
-
-            const pagination = document.getElementById('paginationControls');
-            if (pagination) pagination.style.display = 'none';
-        } else {
-            loadContent(); // fallback
-        }
-    } catch (error) {
-        console.error('Surprise Me error:', error);
-        loadContent(); // fallback
-    }
 }
 
 // Genre select/toggle (Adventure, Horror, Thriller, Drama)
@@ -175,6 +115,10 @@ function getGenreMapping(genreId, type) {
 }
 
 function toggleGenre(genreId, elementIdSuffix) {
+    // Curated lists override active categories
+    activeCuratedCollection = null;
+    deactivateCuratedButtons();
+
     const card = document.getElementById(`genre-${elementIdSuffix}`);
     const isActive = card.classList.contains('active');
 
@@ -255,7 +199,7 @@ function renderSuggestions(items) {
         const div = document.createElement('div');
         div.className = 'suggestion-item';
         div.onclick = () => {
-            showDetailsModal(item.id, item.media_type || mediaType, item);
+            showDetailsModal(item.id, item.media_type || mediaType);
             document.getElementById('searchInput').value = item.display_title;
             closeSuggestions();
         };
@@ -297,50 +241,55 @@ function performSearch() {
     currentPage = 1;
     currentCategory = 'search';
 
-    // Reset toggles
+    // Reset genre toggles
     selectedGenreId = null;
-    selectedLanguage = null;
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.cinema-chip').forEach(c => c.classList.remove('active'));
+    activeCuratedCollection = null;
+    deactivateCuratedButtons();
 
     updateCategorySubHeader();
     loadContent();
 }
 
-// Anime Discovery
-function discoverAnime() {
-    activeMood = 'anime';
-    currentCategory = 'anime';
+// Curated collections loader
+function loadCuratedList(collection) {
+    activeCuratedCollection = collection;
+    currentCategory = 'curated';
     currentQuery = '';
     selectedGenreId = null;
-    selectedLanguage = null;
-    mediaType = 'tv';
 
     // Reset UI selections
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.cinema-chip').forEach(c => c.classList.remove('active'));
     document.getElementById('searchInput').value = '';
 
-    // Toggle active state on anime button
-    document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
-    document.getElementById('mood-anime').classList.add('active');
+    // Toggle active collection side-bar buttons
+    deactivateCuratedButtons();
+    document.querySelectorAll('.col-item-btn').forEach(btn => {
+        if (btn.innerText.toLowerCase().includes(collection)) {
+            btn.classList.add('active');
+        }
+    });
 
     currentPage = 1;
     updateCategorySubHeader();
     loadContent();
 }
 
+function deactivateCuratedButtons() {
+    document.querySelectorAll('.col-item-btn').forEach(btn => btn.classList.remove('active'));
+}
 
 // Quick lists loader (Popular, Top rated)
 function loadQuickCategory(cat) {
     currentCategory = cat;
     currentQuery = '';
     selectedGenreId = null;
-    selectedLanguage = null;
+    activeCuratedCollection = null;
+
     // Reset buttons and input elements
     document.getElementById('searchInput').value = '';
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.cinema-chip').forEach(c => c.classList.remove('active'));
+    deactivateCuratedButtons();
 
     document.getElementById('qPopular').classList.toggle('active', cat === 'popular');
     document.getElementById('qTopRated').classList.toggle('active', cat === 'top_rated');
@@ -363,13 +312,9 @@ function updateCategorySubHeader() {
     } else if (currentCategory === 'search') {
         title.innerHTML = `Search Results: "${currentQuery}"`;
     } else if (currentCategory === 'discover') {
-        const langNames = {
-            'mr': 'Marathi', 'hi': 'Bollywood', 'en': 'Hollywood', 'te': 'Tollywood', 'ta': 'Kollywood',
-            'ml': 'Mollywood', 'kn': 'Sandalwood', 'ur': 'Lollywood', 'bn': 'Dhallywood', 'zh': 'Chinese'
-        };
-        title.innerHTML = selectedLanguage ? `${langNames[selectedLanguage]} Cinema` : `Suggested ${mediaName}`;
-    } else if (currentCategory === 'anime') {
-        title.innerHTML = `Anime 🌸 Top Picks`;
+        title.innerHTML = `Suggested ${mediaName}`;
+    } else if (currentCategory === 'curated') {
+        title.innerHTML = `Curated: ${activeCuratedCollection.toUpperCase()} Collection`;
     }
 }
 
@@ -391,21 +336,18 @@ async function loadContent() {
     else if (currentCategory === 'mood') {
         url = `/api/discover/mood?mood=${activeMood}`;
     }
-    // 2. Anime active
-    else if (currentCategory === 'anime') {
-        url = `/api/tv/discover?with_genres=16&with_original_language=ja&page=${currentPage}`;
+    // 2. Curated collections active
+    else if (currentCategory === 'curated') {
+        url = `/api/curated/${activeCuratedCollection}`;
     }
-    // 3. Discovery Filter (Genre selection, Streaming providers, Cinematic Universe, and/or Year range adjustments)
-    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null || selectedLanguage !== null) {
+    // 3. Discovery Filter (Genre selection, Streaming providers, and/or Year range adjustments)
+    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null) {
         let extraParams = '';
         if (selectedGenreId !== null) {
             extraParams += `&with_genres=${getGenreMapping(selectedGenreId, mediaType)}`;
         }
         if (selectedProviderId !== null) {
             extraParams += `&with_watch_providers=${selectedProviderId}`;
-        }
-        if (selectedLanguage !== null) {
-            extraParams += `&with_original_language=${selectedLanguage}`;
         }
         url = `/api/${mediaType}/discover?year_start=${minYear}&year_end=${maxYear}${extraParams}&page=${currentPage}`;
     }
@@ -463,7 +405,7 @@ function renderCards(items) {
     items.forEach(item => {
         const card = document.createElement('div');
         card.className = 'movie-card';
-        card.onclick = () => showDetailsModal(item.id, item.media_type || mediaType, item);
+        card.onclick = () => showDetailsModal(item.id, item.media_type || mediaType);
 
         const poster = item.poster_url || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=500&auto=format&fit=crop';
         const rating = item.vote_average ? item.vote_average.toFixed(1) : 'N/A';
@@ -502,41 +444,13 @@ function changePage(step) {
 }
 
 // Detail display overlays
-async function showDetailsModal(id, mType, initialData = null) {
+async function showDetailsModal(id, mType) {
     const modal = document.getElementById('movieModal');
     const detailsDiv = document.getElementById('movieDetails');
 
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden'; // Lock background scroll
-
-    if (initialData) {
-        const bg = initialData.poster_url || initialData.poster || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1200=format&fit=crop';
-        const title = initialData.display_title || initialData.title || 'Loading...';
-        const rating = initialData.vote_average ? initialData.vote_average.toFixed(1) : 'N/A';
-        const dateStr = initialData.display_date || '';
-        const releaseYear = dateStr ? dateStr.substring(0, 4) : 'N/A';
-
-        detailsDiv.innerHTML = `
-            <div class="modal-hero" style="background-image: url('${bg}'); filter: blur(10px);"></div>
-            <div class="detail-layout">
-                <div class="detail-poster-wrap">
-                    <img src="${bg}" alt="${title}">
-                </div>
-                <div class="detail-info">
-                    <div class="detail-title">
-                        <h2>${title}</h2>
-                    </div>
-                    <div class="detail-meta-row">
-                        <span><i class="fas fa-calendar"></i> ${releaseYear}</span>
-                        <span class="rating-val"><i class="fas fa-star"></i> ${rating} / 10</span>
-                    </div>
-                    <p class="modal-overview" style="font-size: 1.1rem; color: #a855f7;"><i class="fas fa-spinner fa-spin"></i> Retrieving rich details...</p>
-                </div>
-            </div>
-        `;
-    } else {
-        detailsDiv.innerHTML = '<div class="loading" style="padding: 100px 0;"><i class="fas fa-spinner fa-spin"></i><p>Retrieving title contents...</p></div>';
-    }
+    detailsDiv.innerHTML = '<div class="loading" style="padding: 100px 0;"><i class="fas fa-spinner fa-spin"></i><p>Retrieving title contents...</p></div>';
 
     try {
         const response = await fetch(`/api/${mType}/${id}`);
@@ -642,36 +556,8 @@ async function showDetailsModal(id, mType, initialData = null) {
                 <button class="btn-shelf favorite ${inFavorites ? 'active' : ''}" onclick="toggleShelfItem('favorites', ${item.id}, \`${item.display_title.replace(/'/g, "\\'")}\`, '${poster}', '${mType}')">
                     <i class="fas fa-heart"></i> ${inFavorites ? 'Favorited' : 'Favorite'}
                 </button>
-                <button id="triviaBtn" class="btn" style="background: linear-gradient(135deg, #a855f7, #6366f1); color: white; border: none; border-radius: 8px; font-weight: bold; padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px;" onclick="revealTrivia(${item.id}, '${mType}')">
-                    ✨ Reveal AI Trivia
-                </button>
-            </div>
-            <div id="triviaContainer" style="display: none; margin-top: 15px; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 0.9rem; line-height: 1.5; color: #e2e8f0; text-align: left;">
-                <div id="triviaContent"></div>
             </div>
         `;
-
-        // Extract Cast
-        let castHtml = '';
-        if (item.credits && item.credits.cast) {
-            const topCast = item.credits.cast.slice(0, 10);
-            if (topCast.length > 0) {
-                castHtml = `
-                    <div class="cast-section">
-                        <h4><i class="fas fa-users"></i> Top Cast</h4>
-                        <div class="cast-grid" style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; scrollbar-width: thin;">
-                            ${topCast.map(actor => `
-                                <div class="cast-card" style="min-width: 80px; text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="showPersonDetails(${actor.id})" onmouseover="this.style.transform='scale(1.05)';" onmouseout="this.style.transform='scale(1)';">
-                                    <img src="${actor.profile_path ? `https://image.tmdb.org/t/p/w200${actor.profile_path}` : 'https://via.placeholder.com/200x300?text=No+Photo'}" alt="${actor.name}" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.1);">
-                                    <p style="font-size: 0.75rem; margin-top: 8px; margin-bottom: 2px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">${actor.name}</p>
-                                    <p style="font-size: 0.65rem; margin: 0; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">${actor.character}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-        }
 
         // Recommendations list
         const recsHtml = item.recs && item.recs.length > 0 ? `
@@ -708,7 +594,6 @@ async function showDetailsModal(id, mType, initialData = null) {
                     <p class="modal-overview">${item.overview || 'Synopsis not available.'}</p>
                     
                     ${actionButtonsHtml}
-                    ${castHtml}
                     ${providersHtml}
                 </div>
             </div>
@@ -785,6 +670,7 @@ function resetFilters() {
     currentPage = 1;
     currentQuery = '';
     currentCategory = 'trending';
+    activeCuratedCollection = null;
 
     // Reset UI bindings
     document.getElementById('btnMovie').classList.add('active');
@@ -792,6 +678,7 @@ function resetFilters() {
     document.getElementById('searchInput').value = '';
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+    deactivateCuratedButtons();
 
     document.getElementById('qPopular').classList.remove('active');
     document.getElementById('qTopRated').classList.remove('active');
@@ -801,7 +688,31 @@ function resetFilters() {
     loadContent();
 }
 
+// Surprise me button triggers random selections
+async function surpriseMe() {
+    const grid = document.getElementById('moviesGrid');
+    grid.innerHTML = '<div class="loading"><i class="fas fa-random fa-spin"></i><p>Spinning the wheel of movies...</p></div>';
 
+    try {
+        const response = await fetch(`/api/${mediaType}/trending`);
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+            // Pick a random offset
+            const items = data.results.filter(m => m.poster_url);
+            const shuffled = items.sort(() => 0.5 - Math.random());
+            const selection = shuffled.slice(0, 10);
+            renderCards(selection);
+            document.getElementById('catalogTitle').innerHTML = `💡 Lucky Picks: Curated For You`;
+            document.getElementById('paginationControls').style.display = 'none';
+        } else {
+            loadContent();
+        }
+    } catch (e) {
+        console.error(e);
+        loadContent();
+    }
+}
 
 /* ==========================================
    Chatbot Widget Script (MovieBot)
@@ -1016,21 +927,6 @@ function toggleShelfItem(shelf, id, title, poster, type) {
     // Save to LocalStorage
     localStorage.setItem(shelf, JSON.stringify(list));
 
-    // Sync to DB
-    if (shelf === 'watchlist') {
-        const deviceId = getDeviceId();
-        const endpoint = index > -1 ? '/api/db/watchlist/remove' : '/api/db/watchlist/add';
-        fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                device_id: deviceId,
-                media_id: id,
-                media_type: type
-            })
-        }).catch(e => console.error("DB sync error", e));
-    }
-
     // Update state
     updateShelfCounts();
     renderShelfDrawer();
@@ -1067,7 +963,7 @@ function renderShelfDrawer() {
         card.className = 'drawer-card';
         card.onclick = (e) => {
             if (!e.target.closest('.drawer-card-remove')) {
-                showDetailsModal(item.id, item.type, { display_title: item.title, poster_url: item.poster });
+                showDetailsModal(item.id, item.type);
                 toggleWatchlistDrawer();
             }
         };
@@ -1276,6 +1172,8 @@ function toggleProvider(providerId, providerName) {
         // Deactivate search queries / curated lists so streaming filters are prioritized
         currentQuery = '';
         document.getElementById('searchInput').value = '';
+        activeCuratedCollection = null;
+        deactivateCuratedButtons();
     }
 
     currentPage = 1;
@@ -1308,6 +1206,8 @@ async function discoverByMood(mood) {
         document.getElementById('searchInput').value = '';
         selectedProviderId = null;
         document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+        activeCuratedCollection = null;
+        deactivateCuratedButtons();
 
         currentCategory = 'mood';
         document.getElementById('catalogTitle').innerText = `Mood: ${mood.toUpperCase()}`;
@@ -1568,123 +1468,5 @@ function closeSharedBanner() {
     const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname;
     window.history.pushState({ path: newurl }, '', newurl);
 
-    loadContent();
-}
-
-// ==========================================================================
-// Cast & Character Profile Loader
-// ==========================================================================
-async function showPersonDetails(personId) {
-    const modal = document.getElementById('personModal');
-    const container = document.getElementById('personDetails');
-
-    modal.style.display = 'flex';
-    container.innerHTML = '<div class="loading" style="padding: 100px 0; color: #fff; text-align: center;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i><p>Loading profile...</p></div>';
-
-    try {
-        const resp = await fetch(`/api/person/${personId}`);
-        const data = await resp.json();
-
-        if (!resp.ok) throw new Error(data.error || 'Failed to load');
-
-        let moviesHtml = '';
-        if (data.top_credits && data.top_credits.length > 0) {
-            moviesHtml = `
-                <h4 style="margin-top: 25px; font-size: 1.2rem; color: #fff;"><i class="fas fa-film"></i> Known For</h4>
-                <div style="display: flex; gap: 15px; overflow-x: auto; padding: 15px 0; scrollbar-width: thin;">
-                    ${data.top_credits.map(m => `
-                        <div style="min-width: 100px; max-width: 100px; text-align: center; cursor: pointer; transition: transform 0.2s;" onclick="closePersonModal(); document.getElementById('movieModal').style.display='none'; setTimeout(()=>showDetailsModal(${m.id}, '${m.media_type}'), 300)" onmouseover="this.style.transform='scale(1.05)';" onmouseout="this.style.transform='scale(1)';">
-                            <img src="${m.poster_url || 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="${m.display_title}" style="width: 100%; border-radius: 8px; object-fit: cover;">
-                            <p style="font-size: 0.75rem; margin-top: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.display_title}</p>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        const photoUrl = data.profile_url || 'https://via.placeholder.com/200x300?text=No+Photo';
-        const bioText = data.biography ? data.biography.split('\n\n')[0] : 'Biography not available.';
-
-        container.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 20px;">
-                <div style="display: flex; gap: 25px; align-items: start;">
-                    <img src="${photoUrl}" alt="${data.name}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); box-shadow: 0 10px 20px rgba(0,0,0,0.5);">
-                    <div style="color: #fff; text-align: left;">
-                        <h2 style="font-size: 2rem; margin-bottom: 5px;">${data.name}</h2>
-                        <p style="color: #a855f7; font-size: 0.9rem; margin-bottom: 15px;"><i class="fas fa-briefcase"></i> ${data.known_for_department}</p>
-                        <p style="font-size: 0.95rem; line-height: 1.6; color: #cbd5e1;">${bioText}</p>
-                    </div>
-                </div>
-                ${moviesHtml}
-            </div>
-        `;
-    } catch (e) {
-        container.innerHTML = `<p style="color:red; text-align:center;"><i class="fas fa-exclamation-triangle"></i> Failed to load actor details.</p>`;
-    }
-}
-
-function closePersonModal() {
-    document.getElementById('personModal').style.display = 'none';
-}
-
-// ==========================================================================
-// AI Trivia Generator
-// ==========================================================================
-async function revealTrivia(mediaId, mediaType) {
-    const triviaContainer = document.getElementById('triviaContainer');
-    const triviaContent = document.getElementById('triviaContent');
-    const triviaBtn = document.getElementById('triviaBtn');
-
-    triviaContainer.style.display = 'block';
-    triviaContent.innerHTML = '<div style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-spinner fa-spin"></i> Asking Gemini AI for secrets...</div>';
-    triviaBtn.style.opacity = '0.5';
-    triviaBtn.style.pointerEvents = 'none';
-
-    try {
-        const resp = await fetch(`/api/trivia/${mediaType}/${mediaId}`);
-        const data = await resp.json();
-
-        if (resp.ok && data.trivia) {
-            // Replace markdown bold, linebreaks, and list items for raw JS injection since we have no marked.js
-            let formatted = data.trivia.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            formatted = formatted.replace(/\*/g, '•');
-            formatted = formatted.replace(/\n/g, '<br>');
-            triviaContent.innerHTML = `<div style="padding: 10px 0;">${formatted}</div>`;
-        } else {
-            triviaContent.innerHTML = '<span style="color:red;">Failed to retrieve trivia. Gemini AI is asleep.</span>';
-        }
-    } catch (e) {
-        triviaContent.innerHTML = '<span style="color:red;">Error connecting to Gemini AI.</span>';
-    } finally {
-        triviaBtn.style.display = 'none';
-    }
-}
-
-// ==========================================================================
-// Cinematic Universe Loader
-// ==========================================================================
-function setIndustry(lang) {
-    const chip = document.getElementById(`lang-${lang}`);
-
-    if (selectedLanguage === lang) {
-        selectedLanguage = null;
-        if (chip) chip.classList.remove('active');
-        currentCategory = 'trending';
-        document.getElementById('catalogTitle').innerText = 'Trending Right Now';
-    } else {
-        selectedLanguage = lang;
-        document.querySelectorAll('.cinema-chip').forEach(c => c.classList.remove('active'));
-        if (chip) chip.classList.add('active');
-
-        currentQuery = '';
-        document.getElementById('searchInput').value = '';
-        selectedProviderId = null;
-        document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
-
-        currentCategory = 'discover';
-    }
-
-    currentPage = 1;
-    updateCategorySubHeader();
     loadContent();
 }

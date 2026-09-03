@@ -45,4 +45,3 @@ if __name__ == "__main__":
     test_endpoint("/api/curated/korean", "Curated Korean collection")
     test_endpoint("/api/discover/mood?mood=adrenaline", "Mood Discovery (Adrenaline)")
     test_post_endpoint("/api/chat", "Chatbot Query", {"message": "Suggest a good comedy movie from 2020", "history": []})
-
