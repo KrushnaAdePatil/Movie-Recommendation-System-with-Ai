@@ -118,6 +118,49 @@
                         <span class="mood-emoji">😭</span>
                         <span>Emotional</span>
                     </button>
+                    <button class="mood-card" id="mood-anime" onclick="loadAnime()">
+                        <span class="mood-emoji">🌸</span>
+                        <span>Anime</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Regional Cinema / Film Industry Section -->
+            <div class="filter-section">
+                <h3><i class="fas fa-video"></i> Film Industry</h3>
+                <p class="filter-subtitle">Explore regional cinema</p>
+                <div class="collection-list">
+                    <!-- Default to Marathi if requested by user, handled in JS or just labeled as default -->
+                    <button class="col-item-btn industry-btn" id="ind-mr" onclick="setIndustry('mr')">
+                        <i class="fas fa-film"></i> Marathi Cinema
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-hi" onclick="setIndustry('hi')">
+                        <i class="fas fa-film"></i> Bollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-en" onclick="setIndustry('en')">
+                        <i class="fas fa-film"></i> Hollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-te" onclick="setIndustry('te')">
+                        <i class="fas fa-film"></i> Tollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-ml" onclick="setIndustry('ml')">
+                        <i class="fas fa-film"></i> Mollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-ta" onclick="setIndustry('ta')">
+                        <i class="fas fa-film"></i> Kollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-kn" onclick="setIndustry('kn')">
+                        <i class="fas fa-film"></i> Sandalwood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-yo" onclick="setIndustry('yo')">
+                        <i class="fas fa-film"></i> Nollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-ur" onclick="setIndustry('ur')">
+                        <i class="fas fa-film"></i> Lollywood
+                    </button>
+                    <button class="col-item-btn industry-btn" id="ind-zh" onclick="setIndustry('zh')">
+                        <i class="fas fa-film"></i> Chinawood
+                    </button>
                 </div>
             </div>
 
@@ -195,11 +238,12 @@
         <main class="catalog-content">
             <div class="catalog-header">
                 <h2 id="catalogTitle">Trending Right Now</h2>
-                <div class="category-quick-filters">
-                    <button class="q-btn active" id="qPopular" onclick="loadQuickCategory('popular')">Popular</button>
-                    <button class="q-btn" id="qTopRated" onclick="loadQuickCategory('top_rated')">Top Rated</button>
-                    <button class="btn btn-surprise" onclick="surpriseMe()">
-                        <i class="fas fa-random"></i> Surprise Me!
+                <div class="category-quick-filters segmented-control">
+                    <button class="seg-btn active" id="qNormal" onclick="loadQuickCategory('normal')">Normal</button>
+                    <button class="seg-btn" id="qPopular" onclick="loadQuickCategory('popular')">Popular</button>
+                    <button class="seg-btn" id="qTopRated" onclick="loadQuickCategory('top_rated')">Top Rated</button>
+                    <button class="seg-btn surprise" onclick="surpriseMe()">
+                        <i class="fas fa-random"></i> Mix
                     </button>
                 </div>
             </div>

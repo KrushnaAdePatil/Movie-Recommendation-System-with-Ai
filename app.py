@@ -167,6 +167,11 @@ def discover_media(media_type):
         params['watch_region'] = 'IN'
         params['with_watch_monetization_types'] = 'flatrate|free|ads'
         
+    # Regional / Language filtering
+    original_language = request.args.get('with_original_language')
+    if original_language:
+        params['with_original_language'] = original_language
+        
     # Year filter support (1991 to latest)
     year_start = request.args.get('year_start', '1991')
     year_end = request.args.get('year_end', '2026')

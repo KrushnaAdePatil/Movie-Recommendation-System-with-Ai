@@ -215,6 +215,15 @@ body {
     gap: 28px;
     position: sticky;
     top: 100px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+.sidebar-filters::-webkit-scrollbar {
+    display: none;
+    /* Chrome/Safari */
 }
 
 .filter-section h3 {
@@ -421,55 +430,56 @@ body {
     letter-spacing: -0.5px;
 }
 
-.category-quick-filters {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.q-btn {
+.category-quick-filters.segmented-control {
+    display: inline-flex;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--bg-border);
+    border-radius: 30px;
+    padding: 4px;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100vw;
+}
+
+.category-quick-filters.segmented-control::-webkit-scrollbar {
+    display: none;
+}
+
+.seg-btn {
+    background: transparent;
+    border: none;
     color: var(--text-muted);
-    padding: 8px 16px;
-    border-radius: 20px;
+    padding: 8px 20px;
+    border-radius: 26px;
     font-family: inherit;
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
-.q-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+.seg-btn:hover {
     color: white;
 }
 
-.q-btn.active {
-    background: white;
-    color: var(--bg-darker);
-    border-color: white;
-    font-weight: 700;
+.seg-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 15px var(--primary-glow);
 }
 
-.btn-surprise {
+.seg-btn.surprise {
     background: linear-gradient(135deg, #7c4dff, #ff1744);
     border: none;
     color: white;
-    border-radius: 20px;
-    padding: 9px 18px;
-    font-family: inherit;
-    font-size: 0.85rem;
     font-weight: 700;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    margin-left: 5px;
     box-shadow: 0 4px 15px rgba(124, 77, 255, 0.3);
-    transition: all 0.25s ease;
 }
 
-.btn-surprise:hover {
+.seg-btn.surprise:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(124, 77, 255, 0.5);
 }

@@ -2,11 +2,12 @@
 let mediaType = 'movie'; // 'movie' or 'tv'
 let selectedGenreId = null;
 let selectedProviderId = null;
+let selectedLanguage = null;
 let minYear = 1991;
 let maxYear = 2026;
 let currentPage = 1;
 let currentQuery = '';
-let currentCategory = 'trending'; // 'trending', 'popular', 'top_rated', 'curated'
+let currentCategory = 'normal'; // default category
 let activeCuratedCollection = null;
 
 // Watchlist Shelf lists
@@ -115,9 +116,10 @@ function getGenreMapping(genreId, type) {
 }
 
 function toggleGenre(genreId, elementIdSuffix) {
-    // Curated lists override active categories
+    // Curated lists and industry selection override active categories
     activeCuratedCollection = null;
     deactivateCuratedButtons();
+    selectedLanguage = null; // Clear industry filters if manually toggling genre outside of industry selection
 
     const card = document.getElementById(`genre-${elementIdSuffix}`);
     const isActive = card.classList.contains('active');
@@ -131,6 +133,59 @@ function toggleGenre(genreId, elementIdSuffix) {
         selectedGenreId = genreId;
         card.classList.add('active');
     }
+
+    currentPage = 1;
+    currentCategory = 'discover';
+    updateCategorySubHeader();
+    loadContent();
+}
+
+function loadAnime() {
+    activeCuratedCollection = null;
+    deactivateCuratedButtons();
+    document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
+    document.getElementById('searchInput').value = '';
+    currentQuery = '';
+    selectedProviderId = null;
+    document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+
+    // Deactivate mood selection since Anime is its own category of discovery via TMDB
+    activeMood = null;
+    document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
+    const animeCard = document.getElementById('mood-anime');
+    if (animeCard) animeCard.classList.add('active');
+
+    // Set discover parameters for Japanese Anime (Animation genre: 16)
+    selectedGenreId = 16;
+    selectedLanguage = 'ja';
+    currentCategory = 'discover';
+
+    currentPage = 1;
+    document.getElementById('catalogTitle').innerHTML = `Anime (TMDb)`;
+    loadContent();
+}
+
+function setIndustry(languageCode) {
+    const card = document.getElementById(`ind-${languageCode}`);
+    const isActive = card.classList.contains('active');
+
+    document.querySelectorAll('.industry-btn').forEach(b => b.classList.remove('active'));
+
+    if (isActive) {
+        selectedLanguage = null;
+    } else {
+        selectedLanguage = languageCode;
+        card.classList.add('active');
+    }
+
+    // Reset others
+    activeCuratedCollection = null;
+    deactivateCuratedButtons(); // Wait, industry-btn might share col-item-btn classes, let's keep them separate
+    // Re-apply active class to this industry button if it was cleared
+    if (selectedLanguage) { card.classList.add('active'); }
+
+    document.getElementById('searchInput').value = '';
+    currentQuery = '';
 
     currentPage = 1;
     currentCategory = 'discover';
@@ -232,7 +287,7 @@ function performSearch() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) {
         currentQuery = '';
-        currentCategory = 'trending';
+        currentCategory = 'normal';
         loadContent();
         return;
     }
@@ -276,23 +331,27 @@ function loadCuratedList(collection) {
 }
 
 function deactivateCuratedButtons() {
+    // Only deactivate curated and industry buttons, leaving others intact
     document.querySelectorAll('.col-item-btn').forEach(btn => btn.classList.remove('active'));
 }
 
-// Quick lists loader (Popular, Top rated)
+// Quick lists loader (Normal, Popular, Top rated)
 function loadQuickCategory(cat) {
     currentCategory = cat;
     currentQuery = '';
     selectedGenreId = null;
     activeCuratedCollection = null;
+    selectedLanguage = null;
 
     // Reset buttons and input elements
     document.getElementById('searchInput').value = '';
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.industry-btn').forEach(c => c.classList.remove('active'));
     deactivateCuratedButtons();
 
-    document.getElementById('qPopular').classList.toggle('active', cat === 'popular');
-    document.getElementById('qTopRated').classList.toggle('active', cat === 'top_rated');
+    document.getElementById('qNormal')?.classList.toggle('active', cat === 'normal');
+    document.getElementById('qPopular')?.classList.toggle('active', cat === 'popular');
+    document.getElementById('qTopRated')?.classList.toggle('active', cat === 'top_rated');
 
     currentPage = 1;
     updateCategorySubHeader();
@@ -303,8 +362,8 @@ function updateCategorySubHeader() {
     const title = document.getElementById('catalogTitle');
     const mediaName = mediaType === 'movie' ? 'Movies' : 'TV Shows';
 
-    if (currentCategory === 'trending') {
-        title.innerHTML = `Trending ${mediaName}`;
+    if (currentCategory === 'normal' || currentCategory === 'trending') {
+        title.innerHTML = `Suggested ${mediaName}`;
     } else if (currentCategory === 'popular') {
         title.innerHTML = `Popular ${mediaName}`;
     } else if (currentCategory === 'top_rated') {
@@ -312,7 +371,18 @@ function updateCategorySubHeader() {
     } else if (currentCategory === 'search') {
         title.innerHTML = `Search Results: "${currentQuery}"`;
     } else if (currentCategory === 'discover') {
-        title.innerHTML = `Suggested ${mediaName}`;
+        if (selectedLanguage === 'ja' && selectedGenreId === 16) {
+            title.innerHTML = `Anime (TMDb)`;
+        } else if (selectedLanguage) {
+            const mapName = {
+                'mr': 'Marathi Cinema', 'hi': 'Bollywood', 'en': 'Hollywood',
+                'te': 'Tollywood', 'ml': 'Mollywood', 'ta': 'Kollywood',
+                'kn': 'Sandalwood', 'yo': 'Nollywood', 'ur': 'Lollywood', 'zh': 'Chinawood'
+            };
+            title.innerHTML = `${mapName[selectedLanguage] || 'Regional'} ${mediaName}`;
+        } else {
+            title.innerHTML = `Suggested ${mediaName}`;
+        }
     } else if (currentCategory === 'curated') {
         title.innerHTML = `Curated: ${activeCuratedCollection.toUpperCase()} Collection`;
     }
@@ -340,8 +410,8 @@ async function loadContent() {
     else if (currentCategory === 'curated') {
         url = `/api/curated/${activeCuratedCollection}`;
     }
-    // 3. Discovery Filter (Genre selection, Streaming providers, and/or Year range adjustments)
-    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null) {
+    // 3. Discovery Filter (Genre selection, Streaming providers, Regional Language, and/or Year range adjustments)
+    else if (currentCategory === 'discover' || selectedGenreId !== null || selectedProviderId !== null || selectedLanguage !== null) {
         let extraParams = '';
         if (selectedGenreId !== null) {
             extraParams += `&with_genres=${getGenreMapping(selectedGenreId, mediaType)}`;
@@ -349,9 +419,19 @@ async function loadContent() {
         if (selectedProviderId !== null) {
             extraParams += `&with_watch_providers=${selectedProviderId}`;
         }
+        if (selectedLanguage !== null) {
+            extraParams += `&with_original_language=${selectedLanguage}`;
+        }
         url = `/api/${mediaType}/discover?year_start=${minYear}&year_end=${maxYear}${extraParams}&page=${currentPage}`;
     }
-    // 4. Default categories (trending, popular, top_rated)
+    // 4. Normal / Random Suggested Category (Bypass year ranges if requested, but we'll apply standard discover with popularity desc or trending)
+    else if (currentCategory === 'normal') {
+        let randPage = currentPage;
+        // Option to add some randomness to the default Normal page if it's the first page
+        if (currentPage === 1) randPage = Math.floor(Math.random() * 5) + 1;
+        url = `/api/${mediaType}/discover?sort_by=popularity.desc&page=${randPage}`;
+    }
+    // 5. Default categories (popular, top_rated)
     else {
         url = `/api/${mediaType}/${currentCategory}?page=${currentPage}`;
     }
@@ -665,11 +745,12 @@ function resetFilters() {
     mediaType = 'movie';
     selectedGenreId = null;
     selectedProviderId = null;
+    selectedLanguage = null;
     minYear = 1991;
     maxYear = 2026;
     currentPage = 1;
     currentQuery = '';
-    currentCategory = 'trending';
+    currentCategory = 'normal';
     activeCuratedCollection = null;
 
     // Reset UI bindings
@@ -677,11 +758,13 @@ function resetFilters() {
     document.getElementById('btnTV').classList.remove('active');
     document.getElementById('searchInput').value = '';
     document.querySelectorAll('.genre-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
     deactivateCuratedButtons();
 
-    document.getElementById('qPopular').classList.remove('active');
-    document.getElementById('qTopRated').classList.remove('active');
+    document.getElementById('qNormal')?.classList.add('active');
+    document.getElementById('qPopular')?.classList.remove('active');
+    document.getElementById('qTopRated')?.classList.remove('active');
 
     initializeSliders();
     updateCategorySubHeader();
@@ -1171,6 +1254,7 @@ function toggleProvider(providerId, providerName) {
 
         // Deactivate search queries / curated lists so streaming filters are prioritized
         currentQuery = '';
+        selectedLanguage = null;
         document.getElementById('searchInput').value = '';
         activeCuratedCollection = null;
         deactivateCuratedButtons();
@@ -1194,8 +1278,8 @@ async function discoverByMood(mood) {
     if (activeMood === mood) {
         activeMood = null;
         card.classList.remove('active');
-        currentCategory = 'trending';
-        document.getElementById('catalogTitle').innerText = 'Trending Right Now';
+        currentCategory = 'normal';
+        document.getElementById('catalogTitle').innerText = 'Suggested Right Now';
     } else {
         activeMood = mood;
         document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
@@ -1205,6 +1289,8 @@ async function discoverByMood(mood) {
         currentQuery = '';
         document.getElementById('searchInput').value = '';
         selectedProviderId = null;
+        selectedLanguage = null;
+        selectedGenreId = null;
         document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
         activeCuratedCollection = null;
         deactivateCuratedButtons();
@@ -1461,8 +1547,8 @@ function closeSharedBanner() {
     document.getElementById('sharedPlaylistBanner').style.display = 'none';
     tempSharedList = null;
 
-    currentCategory = 'trending';
-    document.getElementById('catalogTitle').innerText = 'Trending Right Now';
+    currentCategory = 'normal';
+    document.getElementById('catalogTitle').innerText = 'Suggested Right Now';
     document.getElementById('paginationControls').style.display = 'flex';
 
     const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname;
