@@ -17,8 +17,10 @@ if os.path.exists('.env'):
                 os.environ[k.strip()] = v.strip()
 
 # Database Initialization
+DB_PATH = '/tmp/movies.db' if os.environ.get('VERCEL') else 'movies.db'
+
 def init_db():
-    conn = sqlite3.connect('movies.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS watchlist (
@@ -675,7 +677,7 @@ def get_watchlist():
     if not device_id:
         return jsonify({'error': 'device_id required'}), 400
     
-    conn = sqlite3.connect('movies.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT media_id, media_type, added_at FROM watchlist WHERE device_id = ? ORDER BY added_at DESC', (device_id,))
     rows = c.fetchall()
@@ -695,7 +697,7 @@ def add_watchlist():
         return jsonify({'error': 'Missing required fields'}), 400
         
     try:
-        conn = sqlite3.connect('movies.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('INSERT OR IGNORE INTO watchlist (device_id, media_id, media_type) VALUES (?, ?, ?)', 
                   (device_id, media_id, media_type))
@@ -716,7 +718,7 @@ def remove_watchlist():
         return jsonify({'error': 'Missing required fields'}), 400
         
     try:
-        conn = sqlite3.connect('movies.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('DELETE FROM watchlist WHERE device_id = ? AND media_id = ? AND media_type = ?', 
                   (device_id, media_id, media_type))
