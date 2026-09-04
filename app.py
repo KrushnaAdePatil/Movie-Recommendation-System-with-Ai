@@ -115,7 +115,7 @@ MOOD_CACHE = {
     ]
 }
 
-def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=30):
+def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=35):
     """Helper to fetch exact number of results by managing TMDB 20-item pages"""
     start_idx = (req_page_num - 1) * page_size
     end_idx = req_page_num * page_size
@@ -123,24 +123,30 @@ def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=3
     start_tmdb_page = (start_idx // 20) + 1
     end_tmdb_page = ((end_idx - 1) // 20) + 1
     
+    total_results = 0
+    
     def fetch_page(p):
         page_params = params.copy()
         page_params['page'] = p
         resp = requests.get(endpoint, params=page_params)
         if resp.status_code == 200:
-            return resp.json().get('results', [])
-        return []
+            return resp.json()
+        return {}
 
     if start_tmdb_page == end_tmdb_page:
-        tmdb_results = fetch_page(start_tmdb_page)
+        data = fetch_page(start_tmdb_page)
+        tmdb_results = data.get('results', [])
+        total_results = data.get('total_results', 0)
         offset_in_page = start_idx % 20
         sliced_results = tmdb_results[offset_in_page : offset_in_page + page_size]
     else:
         with ThreadPoolExecutor(max_workers=2) as executor:
             pages = list(executor.map(fetch_page, range(start_tmdb_page, end_tmdb_page + 1)))
         merged = []
-        for p_res in pages:
-            merged.extend(p_res)
+        for i, p_data in enumerate(pages):
+            if i == 0:
+                total_results = p_data.get('total_results', 0)
+            merged.extend(p_data.get('results', []))
         offset_in_first = start_idx % 20
         sliced_results = merged[offset_in_first : offset_in_first + page_size]
         
@@ -150,10 +156,16 @@ def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=3
         item['display_date'] = item.get('release_date') or item.get('first_air_date')
         item['media_type'] = media_type
         
+    import math
+    actual_total_pages = math.ceil(total_results / page_size) if total_results > 0 else 0
+    if actual_total_pages > 333:
+        actual_total_pages = 333
+        
     return {
         'page': req_page_num,
         'results': sliced_results,
-        'total_pages': 500  # Estimate
+        'total_pages': actual_total_pages,
+        'total_results': total_results
     }
 
 @app.route('/')

@@ -1,4 +1,4 @@
-// State variables
+﻿// State variables
 let mediaType = 'movie'; // 'movie' or 'tv'
 let selectedGenreId = null;
 let selectedProviderId = null;
@@ -10,7 +10,9 @@ let currentQuery = '';
 let currentCategory = 'normal'; // default category
 let activeMood = null;
 let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
 let activeDrawerTab = 'watchlist';
+let activeCuratedCollection = null;
 
 // Debouncer timeout
 let searchSuggestTimeout = null;
@@ -395,6 +397,7 @@ async function loadContent() {
             else if (activeMood === 'mindbending') extraParams += `&with_genres=878,9648`;
             else if (activeMood === 'cozy') extraParams += `&with_genres=10751,35`;
             else if (activeMood === 'romance') extraParams += `&with_genres=10749&include_adult=true`;
+            else if (activeMood === 'kids') extraParams += `&with_genres=10751|16|10762`;
         }
         if (selectedProviderId !== null) {
             extraParams += `&with_watch_providers=${selectedProviderId}`;
@@ -435,14 +438,12 @@ async function loadContent() {
 
             // Manage pagination details (curated, shared, and mood lists don't use pages)
             if (currentCategory !== 'curated' && currentCategory !== 'shared' && currentCategory !== 'mood') {
-                pagination.style.display = 'flex';
-                document.getElementById('pageNumberDisplay').innerText = `Page ${currentPage} of ${data.total_pages || 1}`;
-
-                // Toggle navbar buttons
-                const prevBtn = pagination.querySelector('button:first-child');
-                const nextBtn = pagination.querySelector('button:last-child');
-                prevBtn.disabled = currentPage === 1;
-                nextBtn.disabled = currentPage >= (data.total_pages || 1);
+                renderPagination(data.total_pages || 1);
+                if (data.total_results !== undefined) {
+                    const titleEl = document.getElementById('catalogTitle');
+                    const baseText = titleEl.innerHTML.split(' <span')[0];
+                    titleEl.innerHTML = `${baseText} <span class="total-results-count">(${data.total_results.toLocaleString()} matches)</span>`;
+                }
             }
         } else {
             grid.innerHTML = `
@@ -1514,4 +1515,84 @@ function closeSharedBanner() {
     window.history.pushState({ path: newurl }, '', newurl);
 
     loadContent();
+}
+
+/* ==========================================================================
+   Advanced Pagination Logic
+   ========================================================================== */
+function renderPagination(totalPages) {
+    const pagination = document.getElementById('paginationControls');
+    pagination.innerHTML = '';
+
+    if (totalPages <= 1) {
+        pagination.style.display = 'none';
+        return;
+    }
+
+    pagination.style.display = 'flex';
+
+    // Prev Button
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-nav';
+    prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i> Prev';
+    prevBtn.disabled = currentPage === 1;
+    prevBtn.onclick = () => changePage(-1);
+    pagination.appendChild(prevBtn);
+
+    // Page Numbers
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+
+    if (currentPage <= 3) {
+        endPage = Math.min(totalPages, 5);
+    }
+    if (currentPage >= totalPages - 2) {
+        startPage = Math.max(1, totalPages - 4);
+    }
+
+    if (startPage > 1) {
+        pagination.appendChild(createPageBtn(1));
+        if (startPage > 2) {
+            const ellipsis = document.createElement('span');
+            ellipsis.className = 'page-ellipsis';
+            ellipsis.innerText = '...';
+            pagination.appendChild(ellipsis);
+        }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        pagination.appendChild(createPageBtn(i));
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            const ellipsis = document.createElement('span');
+            ellipsis.className = 'page-ellipsis';
+            ellipsis.innerText = '...';
+            pagination.appendChild(ellipsis);
+        }
+        pagination.appendChild(createPageBtn(totalPages));
+    }
+
+    // Next Button
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-nav';
+    nextBtn.innerHTML = 'Next <i class="fas fa-chevron-right"></i>';
+    nextBtn.disabled = currentPage >= totalPages;
+    nextBtn.onclick = () => changePage(1);
+    pagination.appendChild(nextBtn);
+}
+
+function createPageBtn(pageNum) {
+    const btn = document.createElement('button');
+    btn.className = `page-num-btn ${pageNum === currentPage ? 'active' : ''}`;
+    btn.innerText = pageNum;
+    btn.onclick = () => {
+        if (currentPage !== pageNum) {
+            currentPage = pageNum;
+            loadContent();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+    return btn;
 }
