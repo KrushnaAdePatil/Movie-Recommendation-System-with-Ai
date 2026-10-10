@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from flask import Flask, render_template, jsonify, request
 import requests
 import json
