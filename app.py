@@ -293,7 +293,7 @@ def get_media_details(media_type, media_id):
     params = {
         'api_key': TMDB_API_KEY,
         'language': 'en-US',
-        'append_to_response': 'videos,recommendations'
+        'append_to_response': 'videos,recommendations,watch/providers'
     }
     
     endpoint = f"{BASE_URL}/{media_type}/{media_id}"
@@ -323,12 +323,9 @@ def get_media_details(media_type, media_id):
             item['timeline_detail'] = f"{seasons} Season{'s' if seasons != 1 else ''}, {episodes} Episode{'s' if episodes != 1 else ''}{avg_run_time}"
             
         # Watch providers (streaming services)
-        providers_url = f"{BASE_URL}/{media_type}/{media_id}/watch/providers"
-        prov_resp = requests.get(providers_url, params={'api_key': TMDB_API_KEY})
         watch_providers = []
-        
-        if prov_resp.status_code == 200:
-            prov_data = prov_resp.json().get('results', {})
+        prov_data = item.get('watch/providers', {}).get('results', {})
+        if prov_data:
             # Check regions for providers, prioritizing India (IN)
             target_country = None
             region_data = {}
@@ -369,6 +366,7 @@ def get_media_details(media_type, media_id):
                 
         # Trailer Extraction
         videos = item.get('videos', {}).get('results', [])
+        item['all_trailers'] = [v['key'] for v in videos if v['site'] == 'YouTube']
         item['trailer'] = next((v for v in videos if v['site'] == 'YouTube' and v['type'] == 'Trailer'), None)
         if not item['trailer'] and videos:
             # Fallback to any video snippet if no explicit trailer exists

@@ -603,11 +603,11 @@ async function showDetailsModal(id, mType) {
             `;
         }
 
-        // Custom Action Bar (Trailer button + Shelf controls)
+        const allTrailersStr = JSON.stringify(item.all_trailers || []).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
         const actionButtonsHtml = `
             <div class="modal-actions-bar">
                 ${item.trailer ? `
-                    <button class="btn btn-trailer" onclick="openCustomPlayer('${item.trailer.key}')">
+                    <button class="btn btn-trailer" onclick="openCustomPlayer('${item.trailer.key}', ${allTrailersStr})">
                         <i class="fas fa-play-circle"></i> Watch Trailer
                     </button>
                 ` : ''}
@@ -1059,10 +1059,16 @@ function triggerPillSearch(query, type) {
     }
 }
 
-/* ==========================================================================
-   Fluid Custom YouTube Video Player Controllers
-   ========================================================================== */
-function openCustomPlayer(videoId) {
+let currentTrailerIndex = 0;
+let currentTrailerList = [];
+
+function openCustomPlayer(videoId, trailerList = []) {
+    currentTrailerList = trailerList.length > 0 ? trailerList : [videoId];
+    currentTrailerIndex = currentTrailerList.indexOf(videoId);
+    if (currentTrailerIndex === -1) currentTrailerIndex = 0;
+    
+    const targetVideo = currentTrailerList[currentTrailerIndex];
+
     const modal = document.getElementById('customPlayerModal');
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden'; // lock background
@@ -1070,26 +1076,41 @@ function openCustomPlayer(videoId) {
     // If player not initialized yet
     if (!ytPlayer) {
         ytPlayer = new YT.Player('customYoutubePlayer', {
-            videoId: videoId,
+            videoId: targetVideo,
             playerVars: {
                 'autoplay': 1,
                 'controls': 0, // Disable standard Youtube controls
                 'showinfo': 0,
                 'rel': 0,
                 'modestbranding': 1,
-                'iv_load_policy': 3
+                'iv_load_policy': 3,
+                'vq': 'hd2160',
+                'origin': window.location.origin
             },
             events: {
                 'onReady': (event) => {
+                    event.target.setPlaybackQuality('highres');
                     event.target.playVideo();
                     startTimelineTimer();
                 },
-                'onStateChange': onPlayerStateChange
+                'onStateChange': onPlayerStateChange,
+                'onError': (event) => {
+                    // Try next trailer if standard embed fails (Error 150 or 101)
+                    currentTrailerIndex++;
+                    if (currentTrailerIndex < currentTrailerList.length) {
+                        event.target.loadVideoById({'videoId': currentTrailerList[currentTrailerIndex], 'suggestedQuality': 'highres'});
+                    } else {
+                        // Reached the end, forcefully open in youtube directly
+                        console.warn("All embedded trailers restricted. Defaulting to raw YouTube.");
+                        closeCustomPlayer();
+                        window.open(`https://www.youtube.com/watch?v=${targetVideo}`, '_blank');
+                    }
+                }
             }
         });
     } else {
         // Load active video ID
-        ytPlayer.loadVideoById(videoId);
+        ytPlayer.loadVideoById({'videoId': targetVideo, 'suggestedQuality': 'highres'});
         ytPlayer.playVideo();
         startTimelineTimer();
     }
