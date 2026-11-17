@@ -1,4 +1,4 @@
-﻿// State variables
+// State variables
 let mediaType = 'movie'; // 'movie' or 'tv'
 let selectedGenreId = null;
 let selectedProviderId = null;
@@ -783,9 +783,39 @@ async function surpriseMe() {
    ========================================== */
 let chatbotHistory = [];
 
+function updatePhoneClock() {
+    const clockEl = document.getElementById('phoneClock');
+    if (!clockEl) return;
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    clockEl.textContent = `${hours}:${mins}`;
+}
+setInterval(updatePhoneClock, 10000);
+
+function quickSendChat(text) {
+    const inputEl = document.getElementById('chatbotInput');
+    if (inputEl) {
+        inputEl.value = text;
+        sendChatbotMessage();
+    }
+}
+
+function clearChatbotHistory() {
+    chatbotHistory = [];
+    const messagesDiv = document.getElementById('chatbotMessages');
+    if (messagesDiv) {
+        messagesDiv.innerHTML = '';
+        addBotMessage("Chat history cleared! 🍿 How can I help you pick your next movie or series?");
+    }
+}
+
 function toggleChatbot() {
     const windowEl = document.getElementById('chatbotWindow');
     windowEl.classList.toggle('active');
+
+    // Update phone status clock
+    updatePhoneClock();
 
     // Auto focus input if active
     if (windowEl.classList.contains('active')) {

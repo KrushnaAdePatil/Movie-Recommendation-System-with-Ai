@@ -457,8 +457,6 @@ def chat():
     if len(contents) > 20:
         contents = contents[-20:]
         
-    api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    
     payload = {
         "contents": contents,
         "systemInstruction": {
@@ -489,24 +487,33 @@ def chat():
         'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
     }
     
-    try:
-        response = requests.post(api_url, params=params, json=payload, timeout=15)
-        if response.status_code == 200:
-            result = response.json()
-            candidates = result.get('candidates', [])
-            if candidates:
-                text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-                if text:
-                    return jsonify({'response': text})
-            
-            return jsonify({'error': 'Empty response from Gemini API'}), 500
-        else:
-            if response.status_code == 429:
-                return jsonify({'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'}), 429
-            return jsonify({'error': f"Gemini API returned status {response.status_code}", 'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text}), 500
-            
-    except Exception as e:
-        return jsonify({'error': f"Failed to connect to Gemini API: {str(e)}"}), 500
+    # Active Gemini models with automatic fallback
+    gemini_models = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash"]
+    last_status = None
+    last_error_text = ""
+
+    for model_name in gemini_models:
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        try:
+            response = requests.post(api_url, params=params, json=payload, timeout=12)
+            if response.status_code == 200:
+                result = response.json()
+                candidates = result.get('candidates', [])
+                if candidates:
+                    text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+                    if text:
+                        return jsonify({'response': text})
+            else:
+                last_status = response.status_code
+                last_error_text = response.text[:200]
+                continue
+        except Exception as e:
+            last_error_text = str(e)
+            continue
+
+    if last_status == 429:
+        return jsonify({'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'}), 429
+    return jsonify({'error': f"Gemini API returned status {last_status or 500}", 'details': last_error_text}), 500
 
 @app.route('/api/discover/mood')
 def discover_by_mood():
@@ -522,8 +529,7 @@ def discover_by_mood():
         movie_suggestions = MOOD_CACHE[mood]
 
     if not movie_suggestions:
-        # Fallback to querying the Gemini API if not found in the local cache
-        api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        gemini_models = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash"]
         
         # Instruct Gemini to return clean JSON
         system_prompt = (
@@ -554,41 +560,33 @@ def discover_by_mood():
             'key': os.environ.get('GEMINI_API_KEY') or ("AQ.Ab" + "8RN6Lu" + "2ch36" + "roFAeq_zJkB-ypS7UpSvL3wCpFBS9XHNRZ8xw")
         }
     
-        try:
-            response = requests.post(api_url, params=params, json=payload, timeout=12)
-            if response.status_code != 200:
-                if response.status_code == 429:
-                    return jsonify({
-                        'error': 'Gemini API rate limit exceeded. Please wait a moment and try again! 🍿⏳'
-                    }), 429
-                return jsonify({
-                    'error': f'Failed to query Gemini API with status {response.status_code}',
-                    'details': response.json() if response.headers.get("Content-Type") == "application/json" else response.text
-                }), 500
-                
-            result = response.json()
-            candidates = result.get('candidates', [])
-            if not candidates:
-                return jsonify({'error': 'Empty response from Gemini'}), 500
-                
-            text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
-            
-            # Clean markdown code block wraps or extract JSON array if Gemini returns conversational text
-            start_idx = text.find('[')
-            end_idx = text.rfind(']')
-            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                text = text[start_idx:end_idx + 1]
-            elif text.startswith("```"):
-                lines = text.split("\n")
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                text = "\n".join(lines).strip()
-                
-            movie_suggestions = json.loads(text)
-        except Exception as e:
-            print(f"Error parsing Gemini mood output: {e}")
+        for model_name in gemini_models:
+            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+            try:
+                response = requests.post(api_url, params=params, json=payload, timeout=12)
+                if response.status_code == 200:
+                    result = response.json()
+                    candidates = result.get('candidates', [])
+                    if candidates:
+                        text = candidates[0].get('content', {}).get('parts', [{}])[0].get('text', '').strip()
+                        start_idx = text.find('[')
+                        end_idx = text.rfind(']')
+                        if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                            text = text[start_idx:end_idx + 1]
+                        elif text.startswith("```"):
+                            lines = text.split("\n")
+                            if lines[0].startswith("```"):
+                                lines = lines[1:]
+                            if lines[-1].startswith("```"):
+                                lines = lines[:-1]
+                            text = "\n".join(lines).strip()
+                        movie_suggestions = json.loads(text)
+                        break
+            except Exception as e:
+                print(f"Error querying {model_name} for mood: {e}")
+                continue
+
+        if not movie_suggestions:
             return jsonify({'error': 'Failed to parse recommendation output'}), 500
 
     # Helper function to enrich items in parallel ThreadPoolExecutor

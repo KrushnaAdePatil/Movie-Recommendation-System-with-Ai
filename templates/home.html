@@ -340,7 +340,7 @@
         </div>
     </footer>
 
-    <!-- Chatbot Widget -->
+    <!-- Chatbot Widget - Smartphone Device Experience -->
     <div class="chatbot-container">
         <!-- Floating Trigger Button -->
         <button class="chatbot-trigger" id="chatbotTrigger" onclick="toggleChatbot()" title="Chat with MovieBot!">
@@ -348,29 +348,68 @@
             <span class="pulse-ring"></span>
         </button>
 
-        <!-- Chat Window Panel -->
-        <div class="chatbot-window" id="chatbotWindow">
+        <!-- Smartphone Device Screen Frame -->
+        <div class="chatbot-window smartphone-frame" id="chatbotWindow">
+            <!-- Smartphone Top Status Bar & Dynamic Island -->
+            <div class="phone-status-bar">
+                <span class="phone-time" id="phoneClock">12:00</span>
+                <div class="phone-dynamic-island">
+                    <span class="island-camera"></span>
+                </div>
+                <div class="phone-status-icons">
+                    <i class="fas fa-signal"></i>
+                    <i class="fas fa-wifi"></i>
+                    <i class="fas fa-battery-three-quarters"></i>
+                </div>
+            </div>
+
+            <!-- In-App Header -->
             <div class="chatbot-header">
                 <div class="bot-info">
+                    <button class="phone-back-btn" onclick="toggleChatbot()" title="Minimize"><i class="fas fa-chevron-left"></i></button>
                     <div class="bot-avatar">
                          <i class="fas fa-robot"></i>
                          <span class="online-indicator"></span>
                     </div>
                     <div>
-                        <h4>MovieBot 🍿</h4>
-                        <span class="bot-status">Online helper</span>
+                        <div class="bot-name-row">
+                            <h4>MovieBot 🍿</h4>
+                            <span class="verified-badge" title="AI Verified"><i class="fas fa-check-circle"></i></span>
+                        </div>
+                        <span class="bot-status">CinePixel AI · Online</span>
                     </div>
                 </div>
-                <button class="chat-close-btn" onclick="toggleChatbot()"><i class="fas fa-times"></i></button>
+                <div class="phone-header-actions">
+                    <button class="chat-tool-btn" onclick="clearChatbotHistory()" title="Clear Chat"><i class="fas fa-trash-alt"></i></button>
+                    <button class="chat-close-btn" onclick="toggleChatbot()" title="Close"><i class="fas fa-times"></i></button>
+                </div>
             </div>
             
+            <!-- Quick Chips Carousel -->
+            <div class="phone-quick-chips">
+                <button class="pq-chip" onclick="quickSendChat('Suggest me a movie for tonight 🍿')">🍿 Tonight's Pick</button>
+                <button class="pq-chip" onclick="quickSendChat('Best thriller movies since 2020')">🔥 Thrillers</button>
+                <button class="pq-chip" onclick="quickSendChat('Give me something cozy and uplifting')">☕ Cozy Vibe</button>
+                <button class="pq-chip" onclick="quickSendChat('Mind-bending sci-fi with big twists')">🧠 Mind-Bending</button>
+                <button class="pq-chip" onclick="quickSendChat('What are the top trending movies right now?')">📈 Trending Now</button>
+            </div>
+
+            <!-- Chat Messages Container -->
             <div class="chatbot-messages" id="chatbotMessages">
                 <!-- Messages will be injected dynamically -->
             </div>
             
+            <!-- Input Area -->
             <div class="chatbot-input-area">
-                <input type="text" id="chatbotInput" placeholder="Ask about movies or series..." onkeydown="handleChatbotKey(event)">
-                <button id="chatbotSendBtn" onclick="sendChatbotMessage()"><i class="fas fa-paper-plane"></i></button>
+                <div class="input-capsule">
+                    <input type="text" id="chatbotInput" placeholder="Ask about movies, vibes, actors..." onkeydown="handleChatbotKey(event)">
+                    <button id="chatbotSendBtn" onclick="sendChatbotMessage()" title="Send"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+
+            <!-- Smartphone Bottom Home Indicator Bar -->
+            <div class="phone-home-bar">
+                <div class="phone-home-indicator"></div>
             </div>
         </div>
     </div>
