@@ -1,12 +1,18 @@
 # pyrefly: ignore [missing-import]
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
 import requests
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+)
 CORS(app)
 
 TMDB_API_KEY = "cdf27570dfded7636db81e5ec29148e1"
@@ -186,6 +192,11 @@ def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=3
 @app.route('/')
 def index():
     return render_template('home.html')
+
+@app.route('/chatbot')
+@app.route('/chatbot.html')
+def chatbot_page():
+    return send_file(os.path.join(BASE_DIR, 'chatbot.html'))
 
 @app.route('/api/<media_type>/<category>')
 def get_media(media_type, category):
