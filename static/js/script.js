@@ -1,3 +1,12 @@
+// Universal API URL resolver (seamlessly connects when running via localhost, live-server or file://)
+function apiUrl(path) {
+    if (!path.startsWith('/')) path = '/' + path;
+    if (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '5000')) {
+        return `http://127.0.0.1:5000${path}`;
+    }
+    return path;
+}
+
 // State variables
 let mediaType = 'movie'; // 'movie' or 'tv'
 let selectedGenreId = null;
@@ -200,7 +209,7 @@ function setupSuggestions() {
 
         searchSuggestTimeout = setTimeout(async () => {
             try {
-                const response = await fetch(`/api/${mediaType}/search?query=${encodeURIComponent(query)}&year_start=${minYear}&year_end=${maxYear}&page=1`);
+                const response = await fetch(apiUrl(`/api/${mediaType}/search?query=${encodeURIComponent(query)}&year_start=${minYear}&year_end=${maxYear}&page=1`));
                 if (response.ok) {
                     const data = await response.json();
                     renderSuggestions(data.results || []);
@@ -420,18 +429,27 @@ async function loadContent() {
     }
 
     try {
-        const response = await fetch(url);
-        const data = await response.json();
-
+        const response = await fetch(apiUrl(url));
+        
         if (!response.ok) {
-            const errorMsg = data.error || 'Server error. Please try again later.';
+            let errorMsg = 'Server error. Please try again later.';
+            try {
+                const errData = await response.json();
+                if (errData && errData.error) errorMsg = errData.error;
+            } catch (e) {}
+            
             grid.innerHTML = `
-                <div class="loading">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; color: #ff5252;"></i>
-                    <p style="margin-top: 15px; color: #ff5252; text-align: center; font-weight: 500;">${errorMsg}</p>
+                <div class="loading" style="grid-column: 1/-1; text-align: center; padding: 50px 20px;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; color: #ff5252; margin-bottom: 12px;"></i>
+                    <p style="color: #ff5252; font-weight: 500; margin-bottom: 15px;">${errorMsg}</p>
+                    <button class="btn btn-primary" onclick="loadContent()" style="cursor: pointer; padding: 8px 24px; border-radius: 20px;">
+                        <i class="fas fa-redo"></i> Retry
+                    </button>
                 </div>`;
             return;
         }
+
+        const data = await response.json();
 
         if (data.results && data.results.length > 0) {
             renderCards(data.results);
@@ -454,7 +472,17 @@ async function loadContent() {
         }
     } catch (error) {
         console.error('Error fetching list:', error);
-        grid.innerHTML = '<p class="error-text" style="color: #ff5252; text-align: center; grid-column: 1/-1;">Connection lost with server. Please try again later.</p>';
+        grid.innerHTML = `
+            <div class="loading" style="grid-column: 1/-1; text-align: center; padding: 50px 20px;">
+                <i class="fas fa-plug" style="font-size: 2.8rem; color: #ff5252; margin-bottom: 15px;"></i>
+                <h3 style="color: #fff; margin-bottom: 10px;">Connection lost with server</h3>
+                <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 18px; line-height: 1.5; font-size: 0.95rem;">
+                    Please verify that the Flask backend is running at <strong style="color: #fff;">http://127.0.0.1:5000</strong>.
+                </p>
+                <button class="btn btn-primary" onclick="loadContent()" style="cursor: pointer; padding: 8px 24px; border-radius: 20px;">
+                    <i class="fas fa-redo"></i> Retry Connection
+                </button>
+            </div>`;
     }
 }
 
@@ -514,7 +542,7 @@ async function showDetailsModal(id, mType) {
     detailsDiv.innerHTML = '<div class="loading" style="padding: 100px 0;"><i class="fas fa-spinner fa-spin"></i><p>Retrieving title contents...</p></div>';
 
     try {
-        const response = await fetch(`/api/${mType}/${id}`);
+        const response = await fetch(apiUrl(`/api/${mType}/${id}`));
         if (!response.ok) throw new Error('API Error');
         const item = await response.json();
 
@@ -758,7 +786,7 @@ async function surpriseMe() {
     grid.innerHTML = '<div class="loading"><i class="fas fa-random fa-spin"></i><p>Spinning the wheel of movies...</p></div>';
 
     try {
-        const response = await fetch(`/api/${mediaType}/trending`);
+        const response = await fetch(apiUrl(`/api/${mediaType}/trending`));
         const data = await response.json();
 
         if (data.results && data.results.length > 0) {
@@ -870,7 +898,7 @@ async function sendChatbotMessage() {
     showTypingIndicator();
 
     try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch(apiUrl('/api/chat'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1348,7 +1376,7 @@ async function startQuickMatcherQuiz() {
 
     try {
         // Fetch trending items to swipe on
-        const response = await fetch(`/api/movie/trending?page=1`);
+        const response = await fetch(apiUrl(`/api/movie/trending?page=1`));
         if (!response.ok) throw new Error('API Error');
         const data = await response.json();
 
@@ -1449,7 +1477,7 @@ async function getQuizRecommendations() {
     showTypingIndicator();
 
     try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch(apiUrl('/api/chat'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -2,10 +2,10 @@ import requests
 
 BASE_URL = "http://127.0.0.1:5000"
 
-def test_endpoint(path, name):
+def test_endpoint(path, name, timeout=8):
     url = f"{BASE_URL}{path}"
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=timeout)
         print(f"[{name}] GET {path} - Status: {response.status_code}")
         if response.status_code == 200:
             print("  -> Success!")
@@ -43,5 +43,5 @@ if __name__ == "__main__":
     test_endpoint("/api/movie/475557", "Movie Details (Joker)")
     test_endpoint("/api/movie/genres", "Get Genres list")
     test_endpoint("/api/curated/korean", "Curated Korean collection")
-    test_endpoint("/api/discover/mood?mood=adrenaline", "Mood Discovery (Adrenaline)")
+    test_endpoint("/api/discover/mood?mood=adrenaline", "Mood Discovery (Adrenaline)", timeout=15)
     test_post_endpoint("/api/chat", "Chatbot Query", {"message": "Suggest a good comedy movie from 2020", "history": []})

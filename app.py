@@ -1,11 +1,13 @@
 # pyrefly: ignore [missing-import]
 from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 import requests
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
+CORS(app)
 
 TMDB_API_KEY = "cdf27570dfded7636db81e5ec29148e1"
 BASE_URL = "https://api.tmdb.org/3"
@@ -127,47 +129,59 @@ def fetch_tmdb_paginated(endpoint, params, req_page_num, media_type, page_size=3
     total_results = 0
     
     def fetch_page(p):
-        page_params = params.copy()
-        page_params['page'] = p
-        resp = requests.get(endpoint, params=page_params)
-        if resp.status_code == 200:
-            return resp.json()
+        try:
+            page_params = params.copy()
+            page_params['page'] = p
+            resp = requests.get(endpoint, params=page_params, timeout=10)
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception as e:
+            print(f"Error fetching TMDb page {p} from {endpoint}: {e}")
         return {}
 
-    if start_tmdb_page == end_tmdb_page:
-        data = fetch_page(start_tmdb_page)
-        tmdb_results = data.get('results', [])
-        total_results = data.get('total_results', 0)
-        offset_in_page = start_idx % 20
-        sliced_results = tmdb_results[offset_in_page : offset_in_page + page_size]
-    else:
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            pages = list(executor.map(fetch_page, range(start_tmdb_page, end_tmdb_page + 1)))
-        merged = []
-        for i, p_data in enumerate(pages):
-            if i == 0:
-                total_results = p_data.get('total_results', 0)
-            merged.extend(p_data.get('results', []))
-        offset_in_first = start_idx % 20
-        sliced_results = merged[offset_in_first : offset_in_first + page_size]
-        
-    for item in sliced_results:
-        item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-        item['display_title'] = item.get('title') or item.get('name')
-        item['display_date'] = item.get('release_date') or item.get('first_air_date')
-        item['media_type'] = media_type
-        
-    import math
-    actual_total_pages = math.ceil(total_results / page_size) if total_results > 0 else 0
-    if actual_total_pages > 333:
-        actual_total_pages = 333
-        
-    return {
-        'page': req_page_num,
-        'results': sliced_results,
-        'total_pages': actual_total_pages,
-        'total_results': total_results
-    }
+    try:
+        if start_tmdb_page == end_tmdb_page:
+            data = fetch_page(start_tmdb_page)
+            tmdb_results = data.get('results', [])
+            total_results = data.get('total_results', 0)
+            offset_in_page = start_idx % 20
+            sliced_results = tmdb_results[offset_in_page : offset_in_page + page_size]
+        else:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                pages = list(executor.map(fetch_page, range(start_tmdb_page, end_tmdb_page + 1)))
+            merged = []
+            for i, p_data in enumerate(pages):
+                if i == 0:
+                    total_results = p_data.get('total_results', 0)
+                merged.extend(p_data.get('results', []))
+            offset_in_first = start_idx % 20
+            sliced_results = merged[offset_in_first : offset_in_first + page_size]
+            
+        for item in sliced_results:
+            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+            item['display_title'] = item.get('title') or item.get('name')
+            item['display_date'] = item.get('release_date') or item.get('first_air_date')
+            item['media_type'] = media_type
+            
+        import math
+        actual_total_pages = math.ceil(total_results / page_size) if total_results > 0 else 0
+        if actual_total_pages > 333:
+            actual_total_pages = 333
+            
+        return {
+            'page': req_page_num,
+            'results': sliced_results,
+            'total_pages': actual_total_pages,
+            'total_results': total_results
+        }
+    except Exception as e:
+        print(f"Error in fetch_tmdb_paginated: {e}")
+        return {
+            'page': req_page_num,
+            'results': [],
+            'total_pages': 0,
+            'total_results': 0
+        }
 
 @app.route('/')
 def index():
@@ -255,34 +269,36 @@ def search_media(media_type):
     }
     
     endpoint = f"{BASE_URL}/search/{media_type}"
-    response = requests.get(endpoint, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        year_start = int(request.args.get('year_start', 1991))
-        year_end = int(request.args.get('year_end', 2026))
-        
-        filtered_results = []
-        for item in data.get('results', []):
-            date_str = item.get('release_date') or item.get('first_air_date')
-            item_year = None
-            if date_str and len(date_str) >= 4:
-                try:
-                    item_year = int(date_str[:4])
-                except ValueError:
-                    pass
+    try:
+        response = requests.get(endpoint, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            year_start = int(request.args.get('year_start', 1991))
+            year_end = int(request.args.get('year_end', 2026))
             
-            # Check if year is within constraints
-            if not date_str or item_year is None or (year_start <= item_year <= year_end):
-                item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-                item['display_title'] = item.get('title') or item.get('name')
-                item['display_date'] = date_str
-                item['media_type'] = media_type
-                filtered_results.append(item)
+            filtered_results = []
+            for item in data.get('results', []):
+                date_str = item.get('release_date') or item.get('first_air_date')
+                item_year = None
+                if date_str and len(date_str) >= 4:
+                    try:
+                        item_year = int(date_str[:4])
+                    except ValueError:
+                        pass
                 
-        data['results'] = filtered_results
-        return jsonify(data)
-    return jsonify({'error': f'Failed to search {media_type}'}), 500
+                # Check if year is within constraints
+                if not date_str or item_year is None or (year_start <= item_year <= year_end):
+                    item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+                    item['display_title'] = item.get('title') or item.get('name')
+                    item['display_date'] = date_str
+                    item['media_type'] = media_type
+                    filtered_results.append(item)
+                    
+            data['results'] = filtered_results
+            return jsonify(data)
+        return jsonify({'error': f'Failed to search {media_type}', 'results': []}), response.status_code
+    except Exception as e:
+        return jsonify({'error': f'Search error: {str(e)}', 'results': []}), 500
 
 @app.route('/api/<media_type>/<int:media_id>')
 def get_media_details(media_type, media_id):
@@ -297,92 +313,94 @@ def get_media_details(media_type, media_id):
     }
     
     endpoint = f"{BASE_URL}/{media_type}/{media_id}"
-    response = requests.get(endpoint, params=params)
-    
-    if response.status_code == 200:
-        item = response.json()
-        item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
-        item['display_title'] = item.get('title') or item.get('name')
-        item['display_date'] = item.get('release_date') or item.get('first_air_date')
-        item['media_type'] = media_type
-        
-        # Timeline details
-        if media_type == 'movie':
-            runtime = item.get('runtime')
-            if runtime:
-                hours = runtime // 60
-                mins = runtime % 60
-                item['timeline_detail'] = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+    try:
+        response = requests.get(endpoint, params=params, timeout=10)
+        if response.status_code == 200:
+            item = response.json()
+            item['poster_url'] = f"{IMAGE_BASE_URL}{item['poster_path']}" if item.get('poster_path') else None
+            item['display_title'] = item.get('title') or item.get('name')
+            item['display_date'] = item.get('release_date') or item.get('first_air_date')
+            item['media_type'] = media_type
+            
+            # Timeline details
+            if media_type == 'movie':
+                runtime = item.get('runtime')
+                if runtime:
+                    hours = runtime // 60
+                    mins = runtime % 60
+                    item['timeline_detail'] = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+                else:
+                    item['timeline_detail'] = "N/A"
             else:
-                item['timeline_detail'] = "N/A"
-        else:
-            seasons = item.get('number_of_seasons', 0)
-            episodes = item.get('number_of_episodes', 0)
-            run_times = item.get('episode_run_time', [])
-            avg_run_time = f" ({run_times[0]}m/ep)" if run_times else ""
-            item['timeline_detail'] = f"{seasons} Season{'s' if seasons != 1 else ''}, {episodes} Episode{'s' if episodes != 1 else ''}{avg_run_time}"
-            
-        # Watch providers (streaming services)
-        watch_providers = []
-        prov_data = item.get('watch/providers', {}).get('results', {})
-        if prov_data:
-            # Check regions for providers, prioritizing India (IN)
-            target_country = None
-            region_data = {}
-            for country in ['IN', 'US', 'GB', 'CA']:
-                c_data = prov_data.get(country, {})
-                if any(c_data.get(k) for k in ['flatrate', 'free', 'ads', 'rent', 'buy']):
-                    target_country = country
-                    region_data = c_data
-                    break
-            
-            # Fallback to any region if no target region has providers
-            if not target_country and prov_data:
-                for country, c_data in prov_data.items():
+                seasons = item.get('number_of_seasons', 0)
+                episodes = item.get('number_of_episodes', 0)
+                run_times = item.get('episode_run_time', [])
+                avg_run_time = f" ({run_times[0]}m/ep)" if run_times else ""
+                item['timeline_detail'] = f"{seasons} Season{'s' if seasons != 1 else ''}, {episodes} Episode{'s' if episodes != 1 else ''}{avg_run_time}"
+                
+            # Watch providers (streaming services)
+            watch_providers = []
+            prov_data = item.get('watch/providers', {}).get('results', {})
+            if prov_data:
+                # Check regions for providers, prioritizing India (IN)
+                target_country = None
+                region_data = {}
+                for country in ['IN', 'US', 'GB', 'CA']:
+                    c_data = prov_data.get(country, {})
                     if any(c_data.get(k) for k in ['flatrate', 'free', 'ads', 'rent', 'buy']):
                         target_country = country
                         region_data = c_data
                         break
-            
-            if target_country:
-                for p_type in ['flatrate', 'free', 'ads', 'rent', 'buy']:
-                    providers_list = region_data.get(p_type, [])
-                    for p in providers_list:
-                        watch_providers.append({
-                            'provider_name': p.get('provider_name'),
-                            'logo_url': f"https://image.tmdb.org/t/p/w200{p.get('logo_path')}" if p.get('logo_path') else None,
-                            'type': p_type,
-                            'region': target_country
-                        })
-                        
-        # Remove duplicate provider logos by provider name and type
-        seen_keys = set()
-        item['watch_providers'] = []
-        for p in watch_providers:
-            key = (p['provider_name'], p['type'])
-            if key not in seen_keys:
-                seen_keys.add(key)
-                item['watch_providers'].append(p)
                 
-        # Trailer Extraction
-        videos = item.get('videos', {}).get('results', [])
-        item['all_trailers'] = [v['key'] for v in videos if v['site'] == 'YouTube']
-        item['trailer'] = next((v for v in videos if v['site'] == 'YouTube' and v['type'] == 'Trailer'), None)
-        if not item['trailer'] and videos:
-            # Fallback to any video snippet if no explicit trailer exists
-            item['trailer'] = next((v for v in videos if v['site'] == 'YouTube'), None)
+                # Fallback to any region if no target region has providers
+                if not target_country and prov_data:
+                    for country, c_data in prov_data.items():
+                        if any(c_data.get(k) for k in ['flatrate', 'free', 'ads', 'rent', 'buy']):
+                            target_country = country
+                            region_data = c_data
+                            break
+                
+                if target_country:
+                    for p_type in ['flatrate', 'free', 'ads', 'rent', 'buy']:
+                        providers_list = region_data.get(p_type, [])
+                        for p in providers_list:
+                            watch_providers.append({
+                                'provider_name': p.get('provider_name'),
+                                'logo_url': f"https://image.tmdb.org/t/p/w200{p.get('logo_path')}" if p.get('logo_path') else None,
+                                'type': p_type,
+                                'region': target_country
+                            })
+                            
+            # Remove duplicate provider logos by provider name and type
+            seen_keys = set()
+            item['watch_providers'] = []
+            for p in watch_providers:
+                key = (p['provider_name'], p['type'])
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    item['watch_providers'].append(p)
+                    
+            # Trailer Extraction
+            videos = item.get('videos', {}).get('results', [])
+            item['all_trailers'] = [v['key'] for v in videos if v['site'] == 'YouTube']
+            item['trailer'] = next((v for v in videos if v['site'] == 'YouTube' and v['type'] == 'Trailer'), None)
+            if not item['trailer'] and videos:
+                # Fallback to any video snippet if no explicit trailer exists
+                item['trailer'] = next((v for v in videos if v['site'] == 'YouTube'), None)
+                
+            # Recommendations
+            recs = item.get('recommendations', {}).get('results', [])[:6]
+            for rec in recs:
+                rec['poster_url'] = f"{IMAGE_BASE_URL}{rec['poster_path']}" if rec.get('poster_path') else None
+                rec['display_title'] = rec.get('title') or rec.get('name')
+                rec['display_date'] = rec.get('release_date') or rec.get('first_air_date')
+                rec['media_type'] = media_type
+            item['recs'] = recs
             
-        # Recommendations
-        recs = item.get('recommendations', {}).get('results', [])[:6]
-        for rec in recs:
-            rec['poster_url'] = f"{IMAGE_BASE_URL}{rec['poster_path']}" if rec.get('poster_path') else None
-            rec['display_title'] = rec.get('title') or rec.get('name')
-            rec['display_date'] = rec.get('release_date') or rec.get('first_air_date')
-            rec['media_type'] = media_type
-        item['recs'] = recs
-        
-        return jsonify(item)
-    return jsonify({'error': f'Failed to fetch {media_type} details'}), 500
+            return jsonify(item)
+        return jsonify({'error': f'Failed to fetch {media_type} details'}), response.status_code
+    except Exception as e:
+        return jsonify({'error': f'Details error: {str(e)}'}), 500
 
 @app.route('/api/curated/<collection>')
 def get_curated(collection):
@@ -397,14 +415,17 @@ def get_curated(collection):
             'api_key': TMDB_API_KEY,
             'language': 'en-US'
         }
-        response = requests.get(endpoint, params=params)
-        if response.status_code == 200:
-            details = response.json()
-            details['poster_url'] = f"{IMAGE_BASE_URL}{details['poster_path']}" if details.get('poster_path') else None
-            details['display_title'] = details.get('title') or details.get('name')
-            details['display_date'] = details.get('release_date') or details.get('first_air_date')
-            details['media_type'] = m_type
-            enriched.append(details)
+        try:
+            response = requests.get(endpoint, params=params, timeout=8)
+            if response.status_code == 200:
+                details = response.json()
+                details['poster_url'] = f"{IMAGE_BASE_URL}{details['poster_path']}" if details.get('poster_path') else None
+                details['display_title'] = details.get('title') or details.get('name')
+                details['display_date'] = details.get('release_date') or details.get('first_air_date')
+                details['media_type'] = m_type
+                enriched.append(details)
+        except Exception as e:
+            print(f"Error fetching curated item {media}: {e}")
             
     return jsonify({'results': enriched})
 
@@ -418,8 +439,13 @@ def get_genres(media_type):
         'api_key': TMDB_API_KEY,
         'language': 'en-US'
     }
-    response = requests.get(endpoint, params=params)
-    return jsonify(response.json())
+    try:
+        response = requests.get(endpoint, params=params, timeout=8)
+        if response.status_code == 200:
+            return jsonify(response.json())
+        return jsonify({'genres': []})
+    except Exception as e:
+        return jsonify({'error': str(e), 'genres': []})
 
 @app.route('/api/<media_type>/trending')
 def get_trending(media_type):
@@ -644,6 +670,14 @@ def discover_by_mood():
         'total_results': len(enriched_results),
         'total_pages': 1
     })
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Endpoint not found', 'status': 404, 'results': []}), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({'error': 'Internal server error', 'status': 500, 'results': []}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
